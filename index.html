@@ -18,6 +18,8 @@
   --max:#b86a18;
   --fba:#1a7a56;
   --fba-light:#e8f5ef;
+  --ogi:#2e6ea6;
+  --ogi-light:#e6f0f8;
   --danger:#c0392b;
   --warning:#b86a18;
   --success:#1a7a56;
@@ -26,7 +28,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Helvetica Neue',Helvetica,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem;font-size:14px}
-.page{max-width:980px;margin:0 auto}
+.page{max-width:1200px;margin:0 auto}
 header{margin-bottom:1.5rem}
 h1{font-size:22px;font-weight:500;letter-spacing:-.3px;margin-bottom:4px}
 .header-sub{font-size:12px;color:var(--text3)}
@@ -68,7 +70,7 @@ select{font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radi
 .prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* Cards */
-.cards3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cards3{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}
 .card.best{border:2px solid var(--fba);background:var(--fba-light)}
 .card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -127,7 +129,7 @@ tr:last-child td{border-bottom:none}
 
 @media(max-width:720px){
   .two-col{grid-template-columns:1fr}
-  .cards3{grid-template-columns:1fr}
+  .cards3{grid-template-columns:1fr 1fr}
   .prod-grid{grid-template-columns:1fr}
 }
 </style>
@@ -137,7 +139,7 @@ tr:last-child td{border-bottom:none}
 
 <header>
   <h1>物流コスト比較シミュレーター</h1>
-  <div class="header-sub">自社出荷 vs マックスエクスプレス（3PL）vs FBA — 複数商品タブ切替 — 税抜</div>
+  <div class="header-sub">自社出荷 vs 扇橋出荷 vs マックスエクスプレス（3PL）vs FBA — 複数商品タブ切替 — 税抜</div>
 </header>
 
 <div class="two-col">
@@ -170,7 +172,7 @@ tr:last-child td{border-bottom:none}
       </select>
     </div>
     <div class="ig">
-      <label class="il">梱包タイブ</label>
+      <label class="il">梱包タイプ</label>
       <select id="g-pack" onchange="calc()">
         <option value="60">直貼り（60円）</option>
         <option value="80">ネコポス（80円）</option>
@@ -197,6 +199,32 @@ tr:last-child td{border-bottom:none}
     <div class="ig" style="background:var(--surface2);border-radius:var(--radius-sm);padding:.6rem .75rem">
       <span class="il" style="margin-bottom:2px">固定費合計</span>
       <span id="fixed-total" style="font-size:16px;font-weight:500">—</span>
+      <span style="font-size:11px;color:var(--text3)"> 円/月</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">扇橋出荷 固定費・手数料</div>
+    <div class="ig">
+      <label class="il">保管費</label>
+      <div class="ir"><input type="number" id="g-ogi-hokan" value="5000" min="0" step="500" oninput="calc()"><span class="unit">円/月（1坪・3PL分）</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">出庫手数料</label>
+      <div class="ir"><input type="number" id="g-ogi-shukko" value="56" min="0" step="1" oninput="calc()"><span class="unit">円/件（税別）</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">入庫手数料</label>
+      <div class="ir"><input type="number" id="g-ogi-nyuko" value="300" min="0" step="50" oninput="calc()"><span class="unit">円/PL（税別）</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">月間入庫パレット数</label>
+      <div class="ir"><input type="number" id="g-ogi-pl" value="2" min="1" max="50" oninput="calc()"><span class="unit">PL/月</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="ig" style="background:var(--surface2);border-radius:var(--radius-sm);padding:.6rem .75rem">
+      <span class="il" style="margin-bottom:2px">固定費合計</span>
+      <span id="ogi-fixed-total" style="font-size:16px;font-weight:500">—</span>
       <span style="font-size:11px;color:var(--text3)"> 円/月</span>
     </div>
   </div>
@@ -232,6 +260,7 @@ tr:last-child td{border-bottom:none}
       <span class="chart-title" id="chart-title">手取り / 件（出荷量別）</span>
       <div class="legend">
         <span class="leg"><span class="dot" style="background:var(--self)"></span>自社出荷</span>
+        <span class="leg"><span class="dot" style="background:var(--ogi)"></span>扇橋</span>
         <span class="leg"><span class="dot" style="background:var(--max)"></span>マックス</span>
         <span class="leg"><span class="dot" style="background:var(--fba)"></span>FBA</span>
       </div>
@@ -245,12 +274,13 @@ tr:last-child td{border-bottom:none}
     <table>
       <thead>
         <tr>
-          <th style="width:17%;text-align:left">件数</th>
-          <th style="width:15%">WMS課金</th>
-          <th style="width:17%">固定費按分</th>
-          <th style="width:17%">自社出荷</th>
-          <th style="width:17%">マックス</th>
-          <th style="width:17%">FBA</th>
+          <th style="text-align:left">件数</th>
+          <th>WMS課金</th>
+          <th>固定費按分</th>
+          <th>自社出荷</th>
+          <th>扇橋</th>
+          <th>マックス</th>
+          <th>FBA</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -293,26 +323,33 @@ function getNohinso(){return parseInt(document.getElementById('g-nohinso').value
 function getMaxVar(vol){return 52+wmsRate(vol)+10+30+getNohinso()+getPack();}
 function getVol(){return parseInt(document.getElementById('vol').value)||1000;}
 
+function getOgiFixed(){
+  return (parseInt(document.getElementById('g-ogi-hokan').value)||5000)
+    +(parseInt(document.getElementById('g-ogi-nyuko').value)||300)*(parseInt(document.getElementById('g-ogi-pl').value)||2);
+}
+function getOgiShukko(){return parseInt(document.getElementById('g-ogi-shukko').value)||56;}
+
 function selfUnit(p,shipFee){
   return p-Math.round(p*getRate())-shipFee;
 }
 function maxUnit(p,shipFee,vol){
   return p-Math.round(p*getRate())-shipFee-getMaxVar(vol)-getFixed()/vol;
 }
+function ogiUnit(p,shipFee,vol){
+  return p-Math.round(p*getRate())-shipFee-getOgiShukko()-getOgiFixed()/vol;
+}
 function fbaUnit(p,fbaFee,fbaStore,vol){
   return p-Math.round(p*getRate())-fbaFee-fbaStore-4900/vol;
 }
 
 function activeProd(){return products.find(p=>p.id===activeId)||products[0];}
-
-// Tab rendering
-function renderTabs(){
-  const bar=document.getElementById('tab-bar');
-  bar.innerHTML='';
-  products.forEach(p=>{
-    const t=document.createElement('span');
-    t.className='tab'+(p.id===activeId?' active':'');
-    t.innerHTML=p.name+(products.length>1?`<span class="tab-del" onclick="deleteProd(${p.id},event)">×</span>`:'');
++��X��[�\�[��[��[ۈ�[�\�X��
+^�ۜ��\�Y��[Y[���][[Y[��RY
+	�X�X�\��N�\��[��\�SI����X�˙�ܑXX�
+O��ۜ�Y��[Y[��ܙX]Q[[Y[�
+	��[��N��\�Ә[YOI�X����YOOXX�]�RY��X�]�IΉ��N�[��\�S\��[YJ���X�˛[���O��[��\��H�X�Y[�ۘ�X��H�[]T��
+	��YK]�[�
+H������[�����N�
     t.onclick=(e)=>{if(e.target.classList.contains('tab-del'))return;activeId=p.id;renderTabs();renderProductPanel();calc();};
     bar.appendChild(t);
   });
@@ -363,7 +400,7 @@ function renderProductPanel(){
       </div>
       <div class="ig">
         <label class="il">FBA配送代行手数料</label>
-        <select onChange="updateProd('fbaFee',+this.value)">
+        <select onchange="updateProd('fbaFee',+this.value)">
           <option value="288" ${p.fbaFee===288?'selected':''}>小型・250g以下（288円）</option>
           <option value="385" ${p.fbaFee===385?'selected':''}>標準・1kg以下（385円）</option>
           <option value="432" ${p.fbaFee===432?'selected':''}>標準・2kg以下（432円）</option>
@@ -393,27 +430,32 @@ let chart=null;
 function calc(){
   const fixed=getFixed();
   document.getElementById('fixed-total').textContent=fmt(fixed);
+  const ogiFixed=getOgiFixed();
+  document.getElementById('ogi-fixed-total').textContent=fmt(ogiFixed);
 
   const vol=getVol();
   const p=activeProd();
   const su=selfUnit(p.price,p.shipFee);
+  const ou=ogiUnit(p.price,p.shipFee,vol);
   const mu=maxUnit(p.price,p.shipFee,vol);
   const fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,vol);
 
   document.getElementById('chart-title').textContent=`${p.name} — 手取り / 件（出荷量別）`;
   document.getElementById('table-title').textContent=`${p.name} — 出荷量別 手取り比較表（円/件）`;
 
-  renderCards(p,su,mu,fu,vol);
-  renderBreakeven(p,su,mu,fu,vol,fixed);
+  renderCards(p,su,ou,mu,fu,vol);
+  renderBreakeven(p,su,ou,mu,fu,vol,fixed);
   renderTable(p,vol);
   renderChart(p,vol);
   renderNote(fixed);
 }
 
-function renderCards(p,su,mu,fu,vol){
+function renderCards(p,su,ou,mu,fu,vol){
   const amz=Math.round(p.price*getRate());
+  const vals=[su,ou,mu,fu];
+  const best=Math.max(...vals);
   document.getElementById('cards').innerHTML=`
-    <div class="card">
+    <div class="card${su===best?' best':''}">
       <div class="card-head"><span class="card-name">自社出荷</span><span class="badge badge-cur">現状</span></div>
       <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
       <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
@@ -424,7 +466,19 @@ function renderCards(p,su,mu,fu,vol){
       <div class="tval">${fmt(su)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
       <div class="tsub">月間: ${fmt(su*vol)}円</div>
     </div>
-    <div class="card">
+    <div class="card${ou===best?' best':''}">
+      <div class="card-head"><span class="card-name">扇橋出荷</span><span class="badge" style="background:#d6e6f5;color:#2e6ea6">倉庫</span></div>
+      <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
+      <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
+      <div class="irow cost"><span>送料（佐川）</span><span>△${fmt(p.shipFee)}円</span></div>
+      <div class="irow cost"><span>出庫手数料</span><span>△${fmt(getOgiShukko())}円</span></div>
+      <div class="irow cost"><span>固定費按分</span><span>△${fmt(getOgiFixed()/vol)}円</span></div>
+      <div class="sep"></div>
+      <div class="tlabel">手取り / 件</div>
+      <div class="tval" style="color:var(--ogi)">${fmt(ou)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
+      <div class="tsub" style="color:var(--ogi)">月間: ${fmt(ou*vol)}円</div>
+    </div>
+    <div class="card${mu===best?' best':''}">
       <div class="card-head"><span class="card-name">マックスエクスプレス</span><span class="badge badge-mid">3PL</span></div>
       <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
       <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
@@ -436,7 +490,7 @@ function renderCards(p,su,mu,fu,vol){
       <div class="tval warn">${fmt(mu)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
       <div class="tsub">月間: ${fmt(mu*vol)}円</div>
     </div>
-    <div class="card${fu>=mu?' best':''}">
+    <div class="card${fu===best?' best':''}">
       <div class="card-head"><span class="card-name">FBA</span><span class="badge badge-rec">推奨</span></div>
       <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
       <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
@@ -451,25 +505,15 @@ function renderCards(p,su,mu,fu,vol){
   `;
 }
 
-function renderBreakeven(p,su,mu,fu,vol,fixed){
+function renderBreakeven(p,su,ou,mu,fu,vol,fixed){
   const diffFvM=fu-mu;
   const diffFvS=fu-su;
-  const amz=Math.round(p.price*getRate());
-  const maxVarTotal=amz+p.shipFee+getMaxVar(vol);
-  const fbaVarTotal=amz+p.fbaFee+p.fbaStore;
-  const varDiff=maxVarTotal-fbaVarTotal;
-  let beChip='';
-  if(varDiff>0){
-    const beVol=Math.ceil(fixed/varDiff);
-    beChip=`<span class="chip gray">マックスとFBAの損益分岐: 月${fmt(beVol)}件以上でFBAが逆転</span>`;
-  } else {
-    beChip=`<span class="chip green">FBAが全件数で有利</span>`;
-  }
+  const diffOvS=ou-su;
   document.getElementById('be-bar').innerHTML=`
     <span class="be-label">差額</span>
-    <span class="chip ${diffFvM>=0?'green':'red'}">FBA vs マックス: ${diffFvM>=0?'+':''}${fmt(diffFvM)}円/件（月${diffFvM>=0?'+':''}${fmt(diffFvM*vol)}円）</span>
-    <span class="chip ${diffFvS>=0?'green':'red'}">FBA vs 自社: ${diffFvS>=0?'+':''}${fmt(diffFvS)}円/件（月${diffFvS>=0?'+':''}${fmt(diffFvS*vol)}円）</span>
-    ${beChip}
+    <span class="chip ${diffOvS>=0?'green':'red'}">扇橋 vs 自社: ${diffOvS>=0?'+':''}${fmt(diffOvS)}円/件</span>
+    <span class="chip ${diffFvM>=0?'green':'red'}">FBA vs マックス: ${diffFvM>=0?'+':''}${fmt(diffFvM)}円/件</span>
+    <span class="chip ${diffFvS>=0?'green':'red'}">FBA vs 自社: ${diffFvS>=0?'+':''}${fmt(diffFvS)}円/件</span>
   `;
 }
 
@@ -481,19 +525,21 @@ function renderTable(p,vol){
     const tr=document.createElement('tr');
     if(v===nearest)tr.classList.add('hl');
     const su=selfUnit(p.price,p.shipFee);
+    const ou=ogiUnit(p.price,p.shipFee,v);
     const mu=maxUnit(p.price,p.shipFee,v);
     const fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,v);
-    tr.innerHTML=`<td>${v.toLocaleString()}件</td><td>${wmsRate(v)}円</td><td>${fmt(getFixed()/v)}円</td><td>${fmt(su)}円</td><td>${fmt(mu)}円</td><td>${fmt(fu)}円</td>`;
+    tr.innerHTML=`<td>${v.toLocaleString()}件</td><td>${wmsRate(v)}円</td><td>${fmt(getFixed()/v)}円</td><td>${fmt(su)}円</td><td>${fmt(ou)}円</td><td>${fmt(mu)}円</td><td>${fmt(fu)}円</td>`;
     tbody.appendChild(tr);
   });
 }
 
 function renderChart(p,vol){
   const ctx=document.getElementById('chart').getContext('2d');
-  const labels=[];const ds=[],dm=[],df=[];
+  const labels=[];const ds=[],dogi=[],dm=[],df=[];
   for(let v=100;v<=5000;v+=50){
     labels.push(v);
     ds.push(Math.round(selfUnit(p.price,p.shipFee)));
+    dogi.push(Math.round(ogiUnit(p.price,p.shipFee,v)));
     dm.push(Math.round(maxUnit(p.price,p.shipFee,v)));
     df.push(Math.round(fbaUnit(p.price,p.fbaFee,p.fbaStore,v)));
   }
@@ -502,6 +548,7 @@ function renderChart(p,vol){
     type:'line',
     data:{labels,datasets:[
       {label:'自社出荷',data:ds,borderColor:'#6b6860',borderWidth:1.5,pointRadius:0,tension:0},
+      {label:'扇橋',data:dogi,borderColor:'#2e6ea6',borderWidth:2,pointRadius:0,tension:0.1},
       {label:'マックス',data:dm,borderColor:'#b86a18',borderWidth:2,pointRadius:0,tension:0.1},
       {label:'FBA',data:df,borderColor:'#1a7a56',borderWidth:2,pointRadius:0,tension:0}
     ]},
