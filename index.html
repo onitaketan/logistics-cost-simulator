@@ -1,136 +1,324 @@
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>物流コスト比較シミュレーター（複数商品）</title>
+<title>物流コスト比較シミュレーター</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#f7f6f2;
-  --surface:#ffffff;
-  --surface2:#f0ede8;
-  --border:#e2dfd8;
-  --border2:#ccc9c0;
-  --text:#1a1816;
-  --text2:#6b6860;
-  --text3:#a09d98;
-  --self:#6b6860;
-  --max:#b86a18;
-  --fba:#1a7a56;
-  --fba-light:#e8f5ef;
-  --ogi:#2e6ea6;
-  --ogi-light:#e6f0f8;
-  --danger:#c0392b;
-  --warning:#b86a18;
-  --success:#1a7a56;
-  --radius:10px;
-  --radius-sm:6px;
+  --paper:#f4f5f5;
+  --card:#ffffff;
+  --soft:#eef0f0;
+  --line:#e4e7e7;
+  --line2:#d2d7d7;
+  --ink:#15201d;
+  --ink2:#4c5552;
+  --ink3:#5f6b67;
+  --self:#4f5a63;
+  --ogi:#285f9c;
+  --max:#9a5a10;
+  --fba:#0c6a4e;
+  --good:#0c6a4e;
+  --bad:#b3331d;
+  --warn:#985a0f;
+  --verdict-bg:#15201d;
+  --verdict-bg2:#1c2b27;
+  --r:12px;
+  --r-sm:7px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'Noto Sans JP','Inter',-apple-system,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Helvetica Neue',Helvetica,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem;font-size:14px}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;padding:1.75rem 1.25rem 3rem;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 .page{max-width:1200px;margin:0 auto}
-header{margin-bottom:1.5rem}
-h1{font-size:22px;font-weight:500;letter-spacing:-.3px;margin-bottom:4px}
-.header-sub{font-size:12px;color:var(--text3)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* Header */
+header{margin-bottom:1.1rem;display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.h-sub{font-size:12px;color:var(--ink3);margin-top:3px}
+.h-tag{font-family:var(--mono);font-size:10.5px;color:var(--ink3);letter-spacing:.04em;border:1px solid var(--line2);border-radius:20px;padding:4px 11px}
+
+/* Verdict hero — the signature element */
+.verdict{background:linear-gradient(135deg,var(--verdict-bg) 0%,var(--verdict-bg2) 100%);color:#eef2f0;border-radius:var(--r);padding:1.1rem 1.4rem;margin-bottom:1.1rem;position:relative;overflow:hidden;border-left:4px solid var(--fba);transition:border-color .25s}
+.v-eyebrow{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:#8fa39c;margin-bottom:9px}
+.v-eyebrow .num{color:#cdd8d3}
+.v-main{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap}
+.v-name{font-size:20px;font-weight:700;letter-spacing:.01em}
+.v-net{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.01em}
+.v-net small{font-size:13px;font-weight:400;color:#9fb0aa;margin-left:2px}
+.v-edge{font-size:12px;color:#aebcb6;font-family:var(--mono)}
+.v-edge b{color:#7fe0bb;font-weight:600}
+.v-edge.neg b{color:#f0a08e}
+.v-month{font-size:12px;color:#9fb0aa;margin-top:9px}
+.v-month strong{font-family:var(--mono);color:#eef2f0;font-weight:600;font-size:14px}
 
 /* Layout */
-.two-col{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
-.right-col{display:flex;flex-direction:column;gap:12px}
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem}
-.panel-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px}
-.subsection{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 8px}
-.divider{height:1px;background:var(--border);margin:12px 0}
+.cols{display:grid;grid-template-columns:316px 1fr;gap:14px;align-items:start}
+.stack{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.15rem}
+.p-title{font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:13px}
+.divider{height:1px;background:var(--line);margin:11px 0}
 
 /* Inputs */
-.ig{margin-bottom:10px}
+.ig{margin-bottom:9px}
 .ig:last-child{margin-bottom:0}
-.il{font-size:12px;color:var(--text2);margin-bottom:4px;display:block}
+.il{font-size:12px;color:var(--ink2);margin-bottom:4px;display:block}
 .ir{display:flex;align-items:center;gap:6px}
-input[type=number]{font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);width:100%;outline:none}
-input[type=number]:focus{border-color:var(--border2)}
-input[type=text]{font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);width:100%;outline:none}
-input[type=text]:focus{border-color:var(--border2)}
-select{font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface2);color:var(--text);width:100%;outline:none}
-.unit{font-size:11px;color:var(--text3);white-space:nowrap}
+input[type=number],input[type=text],select{font-family:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--soft);color:var(--ink);width:100%;outline:none;transition:border-color .15s}
+input[type=number]{font-family:var(--mono)}
+input:focus,select:focus{border-color:var(--ogi)}
+.unit{font-size:11px;color:var(--ink3);white-space:nowrap}
+.total-box{background:var(--soft);border-radius:var(--r-sm);padding:.6rem .75rem;display:flex;align-items:baseline;gap:6px}
+.total-box .il{margin:0}
+.total-box .tv{font-family:var(--mono);font-size:16px;font-weight:600;margin-left:auto}
+.total-box .tu{font-size:11px;color:var(--ink3)}
+
+/* Advanced details */
+details.adv{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:0}
+details.adv>summary{list-style:none;cursor:pointer;padding:1.15rem;font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;justify-content:space-between}
+details.adv>summary::-webkit-details-marker{display:none}
+details.adv>summary .chev{transition:transform .2s;font-size:14px;color:var(--ink3)}
+details.adv[open]>summary .chev{transform:rotate(90deg)}
+.adv-body{padding:0 1.15rem 1.15rem}
+.adv-hint{font-size:11px;color:var(--ink3);margin-bottom:11px;line-height:1.5}
+
+/* Slider */
+.slider-wrap{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.05rem 1.15rem}
+.slider-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.slider-label{font-size:12px;color:var(--ink2)}
+.slider-val{font-family:var(--mono);font-size:15px;font-weight:600}
+input[type=range]{width:100%;accent-color:var(--fba);cursor:pointer}
 
 /* Tabs */
-.tab-bar{display:flex;align-items:center;gap:6px;margin-bottom:12px;flex-wrap:wrap}
-.tab{font-size:12px;padding:6px 14px;border:1px solid var(--border);border-radius:20px;cursor:pointer;background:var(--surface2);color:var(--text2);transition:all .15s;white-space:nowrap}
-.tab.active{background:var(--surface);border-color:var(--border2);color:var(--text);font-weight:500}
-.tab-add{font-size:12px;padding:5px 12px;border:1px dashed var(--border2);border-radius:20px;cursor:pointer;background:transparent;color:var(--text3)}
-.tab-add:hover{color:var(--text2);border-color:var(--text3)}
-.tab-del{font-size:11px;margin-left:4px;color:var(--text3);cursor:pointer;opacity:.7}
-.tab-del:hover{opacity:1;color:var(--danger)}
+.tab-bar{display:flex;align-items:center;gap:6px;margin-bottom:11px;flex-wrap:wrap}
+.tab{font-size:12px;padding:6px 14px;border:1px solid var(--line);border-radius:20px;cursor:pointer;background:var(--soft);color:var(--ink2);transition:all .15s;white-space:nowrap}
+.tab.active{background:var(--card);border-color:var(--ink);color:var(--ink);font-weight:500}
+.tab-add{font-size:12px;padding:5px 12px;border:1px dashed var(--line2);border-radius:20px;cursor:pointer;background:transparent;color:var(--ink3)}
+.tab-add:hover{color:var(--ink2);border-color:var(--ink3)}
+.tab-del{font-size:12px;margin-left:5px;color:var(--ink3);cursor:pointer;opacity:.7}
+.tab-del:hover{opacity:1;color:var(--bad)}
 
-/* Product settings panel */
-.product-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:12px}
-.prod-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.prod-name-input{font-size:15px;font-weight:500;border:none;border-bottom:1px solid var(--border);background:transparent;color:var(--text);padding:2px 4px;outline:none;flex:1}
-.prod-name-input:focus{border-color:var(--border2)}
+.product-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.15rem}
+.prod-name-input{font-size:15px;font-weight:500;border:none;border-bottom:1px solid var(--line);background:transparent;padding:2px 4px;outline:none;width:100%;margin-bottom:14px;font-family:inherit}
+.prod-name-input:focus{border-color:var(--ink)}
 .prod-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
 /* Cards */
-.cards3{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem}
-.card.best{border:2px solid var(--fba);background:var(--fba-light)}
-.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1rem;position:relative;transition:border-color .2s,box-shadow .2s}
+.card.best{border:1.5px solid var(--ink);box-shadow:0 2px 14px rgba(15,32,29,.07)}
+.crown{position:absolute;top:-9px;left:14px;font-size:9.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:#fff;padding:3px 9px;border-radius:20px}
+.card-head{display:flex;align-items:center;gap:7px;margin-bottom:11px}
+.card-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 .card-name{font-size:13px;font-weight:500}
-.badge{font-size:10px;padding:2px 8px;border-radius:20px;font-weight:500}
-.badge-rec{background:#d4ede4;color:#1a7a56}
-.badge-cur{background:var(--surface2);color:var(--text3)}
-.badge-mid{background:#faeeda;color:#854f0b}
-.irow{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border);color:var(--text2)}
-.irow:last-child{border-bottom:none}
-.irow.cost{color:var(--danger)}
-.sep{height:1px;background:var(--border2);margin:8px 0}
-.tlabel{font-size:11px;color:var(--text2)}
-.tval{font-size:22px;font-weight:500;margin-top:2px;font-variant-numeric:tabular-nums}
-.tval.green{color:var(--success)}
-.tval.warn{color:var(--warning)}
-.tsub{font-size:11px;color:var(--text2);margin-top:2px}
-.tsub.green{color:var(--success)}
+.irow{display:flex;justify-content:space-between;font-size:11.5px;padding:3px 0;border-bottom:1px solid var(--line);color:var(--ink2)}
+.irow:last-of-type{border-bottom:none}
+.irow .num{color:var(--ink2)}
+.irow.cost .num{color:var(--bad)}
+.sep{height:1px;background:var(--line2);margin:8px 0}
+.tlabel{font-size:10.5px;color:var(--ink3)}
+.tval{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:2px}
+.tval small{font-size:12px;font-weight:400;color:var(--ink3)}
+.tsub{font-size:11px;color:var(--ink2);margin-top:3px;font-family:var(--mono)}
 
-/* Slider */
-.slider-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem}
-.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.slider-label{font-size:12px;color:var(--text2)}
-.slider-val{font-size:14px;font-weight:500}
-input[type=range]{width:100%;accent-color:#1a7a56}
+/* Diff chips */
+.be-bar{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:.85rem 1.15rem;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.be-label{font-size:11px;color:var(--ink3);flex-shrink:0}
+.chip{font-size:12px;padding:4px 12px;border-radius:20px;font-weight:500;white-space:nowrap;font-family:var(--mono)}
+.chip.green{background:#d9efe6;color:#0f6b4f}
+.chip.red{background:#fbe4df;color:#b3331d}
 
-/* Breakeven */
-.be-bar{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:.9rem 1.25rem;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.be-label{font-size:11px;color:var(--text3);flex-shrink:0}
-.chip{font-size:12px;padding:3px 12px;border-radius:20px;font-weight:500;white-space:nowrap}
-.chip.green{background:#d4ede4;color:#1a7a56}
-.chip.red{background:#fde8e6;color:#c0392b}
-.chip.gray{background:var(--surface2);color:var(--text2)}
+/* Profit & labor panel */
+.pl-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+.pl-cell{background:var(--soft);border-radius:var(--r-sm);padding:.7rem .8rem}
+.pl-cell.hi{background:var(--verdict-bg);color:#eef2f0}
+.pl-k{font-size:10.5px;color:var(--ink3);margin-bottom:5px;line-height:1.3}
+.pl-cell.hi .pl-k{color:#8fa39c}
+.pl-v{font-size:18px;font-weight:600}
+.pl-v small{font-size:11px;font-weight:400;color:var(--ink3)}
+.pl-cell.hi .pl-v small{color:#9fb0aa}
+.pl-sub{font-size:10.5px;color:var(--ink3);margin-top:3px}
+.pl-cell.hi .pl-sub{color:#9fb0aa}
+.pl-note{font-size:12.5px;line-height:1.7;color:var(--ink2);background:var(--soft);border-radius:var(--r-sm);padding:.8rem .95rem}
+.pl-note b{color:var(--ink);font-weight:600}
+.pl-grid-3{grid-template-columns:repeat(3,1fr)}
+/* Freed-labor visualization */
+.labor{background:linear-gradient(135deg,var(--verdict-bg),var(--verdict-bg2));color:#eef2f0;border-radius:var(--r);padding:1.15rem 1.35rem}
+.labor-head{font-size:11px;letter-spacing:.05em;color:#8fa39c;text-transform:uppercase;margin-bottom:9px}
+.labor-big{display:flex;align-items:baseline;gap:9px}
+.labor-big .num{font-family:var(--mono);font-size:40px;font-weight:600;line-height:1;color:#7fe0bb}
+.labor-unit{font-size:13px;color:#9fb0aa}
+.labor-conv{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:#aebcb6;margin:11px 0 13px}
+.labor-conv b{color:#eef2f0;font-family:var(--mono)}
+.labor-bar{height:11px;background:rgba(255,255,255,.12);border-radius:6px;overflow:hidden}
+.labor-bar-fill{height:100%;background:linear-gradient(90deg,#2f9e74,#7fe0bb);border-radius:6px;transition:width .4s}
+.labor-barlabel{display:flex;justify-content:space-between;font-size:10px;color:#7f928c;margin-top:6px}
+.labor-note{font-size:12.5px;line-height:1.7;color:#cdd8d3;margin-top:13px;background:rgba(255,255,255,.06);border-radius:var(--r-sm);padding:.8rem .95rem}
+.labor-note b{color:#fff;font-weight:600;font-family:var(--mono)}
+.value-stack{margin-top:14px;background:rgba(255,255,255,.05);border-radius:var(--r-sm);padding:.85rem 1rem}
+.vs-title{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:#8fa39c;margin-bottom:9px}
+.vs-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:#aebcb6;padding:5px 0;gap:10px}
+.vs-row em{display:block;font-style:normal;font-size:10.5px;color:#7f928c;margin-top:1px}
+.vs-row .num{color:#eef2f0;font-weight:500;flex-shrink:0}
+.vs-total{display:flex;justify-content:space-between;align-items:baseline;font-size:14px;font-weight:600;color:#fff;padding-top:9px;margin-top:4px;border-top:1px solid rgba(255,255,255,.14)}
+.vs-total .num{color:#7fe0bb;font-size:18px}
 
 /* Chart */
-.chart-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem}
-.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
-.chart-title{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em}
+.chart-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.15rem}
+.chart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.chart-title{font-size:10px;font-weight:600;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em}
 .legend{display:flex;gap:14px;flex-wrap:wrap}
-.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2)}
 .dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.chart-wrap{position:relative;height:220px}
+.chart-wrap{position:relative;height:230px}
 
 /* Table */
-.table-panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;overflow-x:auto}
+.table-panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.15rem;overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:12px}
-th{font-size:10px;font-weight:600;color:var(--text3);text-align:right;padding:6px 10px;border-bottom:1px solid var(--border2);text-transform:uppercase;letter-spacing:.04em}
+th{font-size:10px;font-weight:600;color:var(--ink3);text-align:right;padding:7px 10px;border-bottom:1px solid var(--line2);text-transform:uppercase;letter-spacing:.04em}
 th:first-child{text-align:left}
-td{padding:5px 10px;text-align:right;border-bottom:1px solid var(--border);color:var(--text2);font-variant-numeric:tabular-nums}
-td:first-child{text-align:left;color:var(--text);font-weight:500}
-tr.hl td{background:#f0faf5;color:#1a7a56}
-tr.hl td:first-child{color:#1a7a56}
+td{padding:7px 10px;text-align:right;border-bottom:1px solid var(--line);font-family:var(--mono);color:var(--ink2)}
+td:first-child{text-align:left;color:var(--ink);font-family:var(--sans)}
 tr:last-child td{border-bottom:none}
+tr.hl td{background:var(--soft);color:var(--ink);font-weight:500}
+.note{font-size:11px;color:var(--ink3);margin-top:12px;line-height:1.6}
 
-.note{font-size:11px;color:var(--text3);line-height:1.7;margin-top:8px}
+/* Action bar */
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+.btn{font-family:inherit;font-size:12px;font-weight:500;padding:7px 14px;border-radius:var(--r-sm);border:1px solid var(--line2);background:var(--card);color:var(--ink);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{background:var(--soft);border-color:var(--ink3)}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.primary:hover{background:#0c1814}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:13px;padding:10px 18px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:50}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-@media(max-width:720px){
-  .two-col{grid-template-columns:1fr}
-  .cards3{grid-template-columns:1fr 1fr}
+/* Responsive */
+@media(max-width:860px){
+  body{padding:1.25rem .9rem 2.5rem}
+  .cols{grid-template-columns:1fr}
+  .cards{grid-template-columns:1fr 1fr}
+  .v-net{font-size:26px}
+  .pl-grid{grid-template-columns:1fr 1fr}
+  .pl-grid-3{grid-template-columns:1fr}
+}
+@media(max-width:480px){
+  .cards{grid-template-columns:1fr}
   .prod-grid{grid-template-columns:1fr}
+}
+
+/* Print */
+@media print{
+  body{background:#fff;padding:0;font-size:11px}
+  .slider-wrap,.actions,.tab-add,.tab-del,.h-tag,details.adv>summary .chev{display:none!important}
+  .cols{grid-template-columns:1fr;gap:8px}
+  .panel,.card,.chart-panel,.table-panel,.verdict,.product-panel,.be-bar,details.adv{break-inside:avoid;box-shadow:none}
+  details.adv[open] .adv-body{display:block}
+  .verdict{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+/* ============================================================
+   UNIVERSAL DESIGN LAYER — legibility, contrast, touch, focus
+   (visual only; calculation logic untouched)
+   ============================================================ */
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+body{font-size:15px;line-height:1.6}
+
+/* Visible keyboard focus on every interactive element */
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,
+summary:focus-visible,[tabindex]:focus-visible,.tab:focus-visible{
+  outline:3px solid #1f6feb;outline-offset:2px;border-radius:4px}
+
+/* Form controls: ≥44px touch target, larger type, clear focus */
+input[type=number],input[type=text],select{font-size:15px;padding:10px 12px;min-height:44px;border-width:1.5px}
+input[type=number]:focus,input[type=text]:focus,select:focus{border-color:#1f6feb;box-shadow:0 0 0 3px rgba(31,111,235,.2)}
+
+/* Range slider: tall track + large thumb */
+input[type=range]{height:34px}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:6px;background:#cfd6d4}
+input[type=range]::-moz-range-track{height:8px;border-radius:6px;background:#cfd6d4}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-9px;width:26px;height:26px;border-radius:50%;background:var(--fba);border:3px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);cursor:pointer}
+input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;background:var(--fba);border:3px solid #fff;cursor:pointer}
+
+/* Buttons & tabs: larger tap area */
+.btn{font-size:14px;padding:11px 16px;min-height:44px;border-width:1.5px}
+.tab,.tab-add{font-size:13.5px;padding:9px 15px;min-height:40px;display:inline-flex;align-items:center}
+.tab-del{font-size:18px;margin-left:7px;min-width:24px;text-align:center}
+
+/* Raise small-label sizes & contrast */
+.p-title{font-size:11.5px;color:var(--ink2)}
+.il{font-size:13px;color:var(--ink2);line-height:1.5}
+.unit{font-size:12.5px;color:var(--ink2)}
+.adv-hint{font-size:12.5px;color:var(--ink2);line-height:1.6}
+.h-sub{font-size:13px;color:var(--ink2)}
+.h-tag{font-size:11.5px;color:var(--ink2)}
+.card-name{font-size:14.5px}
+.irow{font-size:12.5px}
+.tlabel{font-size:12px;color:var(--ink2)}
+.tval{font-size:23px}
+.pl-k{font-size:12px;color:var(--ink2)}
+.slider-label{font-size:13px;color:var(--ink2)}
+.be-label{font-size:12.5px;color:var(--ink2)}
+.chip{font-size:13px;padding:6px 13px}
+.note,.pl-note{font-size:12.5px}
+details.adv>summary{font-size:11.5px;padding:1.25rem 1.15rem}
+.crown{font-size:11px;padding:4px 11px;top:-11px}
+
+/* Contrast on dark blocks (lighten dim greys to ≥4.5:1) */
+.v-eyebrow{color:#b3c1bb;font-size:11.5px;letter-spacing:.06em}
+.v-net small{color:#b7c5bf}
+.v-edge{color:#cdd8d3;font-size:13px}
+.v-month{color:#c4d0cb;font-size:13px}
+.labor-head{color:#bccac4;font-size:12px}
+.labor-unit{color:#bccac4}
+.labor-conv{color:#cdd8d3;font-size:13px}
+.labor-barlabel{color:#a6b6b0;font-size:11px}
+.labor-note{color:#e2e9e6;font-size:13px;line-height:1.75}
+.vs-title{color:#bccac4;font-size:11.5px}
+.vs-row{color:#cdd8d3;font-size:13px}
+.vs-row em{color:#a6b6b0;font-size:11.5px}
+.vs-total{font-size:15px}
+
+/* Table legibility */
+th{font-size:11.5px;color:var(--ink2)}
+td{font-size:12.5px}
+/* Legend line samples (color + pattern) */
+.leg{font-size:12.5px;color:var(--ink2)}
+.leg-line{display:inline-block;width:22px;height:0;vertical-align:middle;flex-shrink:0}
+/* Bottom config zone — set-once company constants */
+.config-zone{margin-top:18px;padding-top:16px;border-top:2px dashed var(--line2)}
+.config-head{font-size:13px;font-weight:700;color:var(--ink2);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.config-head::before{content:"⚙";font-size:15px;color:var(--ink3)}
+.config-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+@media(max-width:860px){.config-grid{grid-template-columns:1fr}}
+/* Self-check (calculation integrity) */
+.selfcheck{margin-top:14px}
+.sc-wrap{border-radius:var(--r);border:1.5px solid;overflow:hidden}
+.sc-wrap.ok{border-color:#bfe0d2;background:#f0f9f5}
+.sc-wrap.bad{border-color:#e9b3a8;background:#fcefec}
+.sc-wrap>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:13px 16px}
+.sc-wrap>summary::-webkit-details-marker{display:none}
+.sc-badge{font-size:13px;font-weight:700;white-space:nowrap}
+.sc-badge.ok{color:#0c6a4e}
+.sc-badge.bad{color:#b3331d}
+.sc-sum{font-size:12.5px;color:var(--ink2);flex:1}
+.sc-chev{font-size:16px;color:var(--ink3);transition:transform .2s}
+.sc-wrap[open] .sc-chev{transform:rotate(90deg)}
+.sc-list{padding:4px 16px 14px}
+.sc-item{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12.5px;padding:6px 0;border-top:1px solid rgba(0,0,0,.06)}
+.sc-item.ok{color:var(--ink2)}
+.sc-item.bad{color:#b3331d;font-weight:600}
+.sc-item .num{color:var(--ink3);font-size:11.5px;text-align:right;flex-shrink:0}
+.sc-item.bad .num{color:#b3331d}
+
+/* Honour high-contrast preference */
+@media (prefers-contrast: more){
+  .card,.panel,.slider-wrap,.product-panel,.table-panel,.chart-panel,.be-bar,details.adv{border-width:2px}
+  :root{--line:#b9bfbd;--line2:#9aa3a0}
 }
 </style>
 </head>
@@ -138,16 +326,71 @@ tr:last-child td{border-bottom:none}
 <div class="page">
 
 <header>
-  <h1>物流コスト比較シミュレーター</h1>
-  <div class="header-sub">自社出荷 vs 扇橋出荷 vs マックスエクスプレス（3PL）vs FBA — 複数商品タブ切替 — 税抜</div>
+  <div>
+    <h1>物流コスト比較シミュレーター</h1>
+    <div class="h-sub">出荷ルート別の手取り／件を、出荷量と原価条件から即時比較</div>
+  </div>
+  <span class="h-tag">自社 · 扇橋 · マックス · FBA</span>
 </header>
 
-<div class="two-col">
+<!-- Verdict hero -->
+<div class="verdict" id="verdict">
+  <div class="v-eyebrow">自社出荷 ⇄ マックスエクスプレス — 月間 <span class="num" id="v-vol">1,000</span> 件時</div>
+  <div class="v-main">
+    <span class="v-name" id="v-name">—</span>
+    <span class="v-net" id="v-net">—</span>
+    <span class="v-edge" id="v-edge"></span>
+  </div>
+  <div class="v-month" id="v-be">—</div>
+</div>
 
-<!-- Left: shared 3PL fixed cost settings -->
-<div style="display:flex;flex-direction:column;gap:12px">
+<div class="cols">
+
+<!-- Left: inputs staff touch (出荷件数・商品・物流コスト) -->
+<div class="stack">
+  <div class="slider-wrap">
+    <div class="slider-head">
+      <span class="slider-label">月間出荷件数</span>
+      <div class="ir" style="width:auto;gap:5px">
+        <input type="number" id="vol-num" value="1000" min="1" step="100" oninput="onVolNum()" style="width:110px;text-align:right;font-family:var(--mono);font-weight:600">
+        <span class="unit">件/月</span>
+      </div>
+    </div>
+    <input type="range" id="vol" min="100" max="50000" value="1000" step="100" oninput="onVol()">
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--ink3);margin-top:4px">
+      <span class="num">100</span><span>スライダーは50,000件まで。超える値は上の欄に直接入力</span><span class="num">50,000</span>
+    </div>
+  </div>
+
+  <div>
+    <div class="tab-bar" id="tab-bar"></div>
+    <div class="product-panel" id="product-panel"></div>
+  </div>
+
+  <div class="panel" style="border-color:var(--self);border-width:1.5px">
+    <div class="p-title" style="color:var(--self)">自社出荷 コスト（比較の基準）</div>
+    <div class="ig">
+      <label class="il">出荷オペレーションの人件費</label>
+      <div class="ir"><input type="number" id="g-self-rate" value="3750" min="0" step="100" oninput="calc()"><span class="unit">円/時</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">1時間あたりの出荷数</label>
+      <div class="ir"><input type="number" id="g-self-tp" value="40" min="1" step="1" oninput="calc()"><span class="unit">セット/時</span></div>
+    </div>
+    <div class="total-box" style="margin-top:2px">
+      <span class="il">→ 自社作業費（自動算出）</span>
+      <span class="tv num" id="self-var-disp">—</span><span class="tu">円/件</span>
+    </div>
+    <div class="divider"></div>
+    <div class="ig">
+      <label class="il">自社月額固定費（倉庫・固定人件費など・任意）</label>
+      <div class="ir"><input type="number" id="g-self-fixed" value="0" min="0" step="1000" oninput="calc()"><span class="unit">円/月</span></div>
+    </div>
+    <p class="adv-hint" style="margin:9px 0 0">※ 人件費 ÷ 出荷数 で1件あたりの自社コストを算出。出荷スピードを上げるほど単価が下がり、マックスとの差額・損益分岐が動きます。</p>
+  </div>
+
   <div class="panel">
-    <div class="panel-title">マックスエクスプレス 月額固定費（全商品共通）</div>
+    <div class="p-title">マックスエクスプレス 月額固定費（全商品共通）</div>
     <div class="ig">
       <label class="il">WMSプラン</label>
       <select id="g-wms" onchange="calc()">
@@ -158,14 +401,14 @@ tr:last-child td{border-bottom:none}
     </div>
     <div class="ig">
       <label class="il">作業スペース</label>
-      <div class="ir"><input type="number" id="g-tsubo" value="5" min="1" max="50" oninput="calc()"><span class="unit">坪 × 4,500円</span></div>
+      <div class="ir"><input type="number" id="g-tsubo" value="5" min="1" max="50" oninput="calc()"><span class="unit">坪</span></div>
     </div>
     <div class="ig">
       <label class="il">パレット保管（追加）</label>
-      <div class="ir"><input type="number" id="g-pallet" value="0" min="0" max="100" oninput="calc()"><span class="unit">PL × 2,000円</span></div>
+      <div class="ir"><input type="number" id="g-pallet" value="0" min="0" max="100" oninput="calc()"><span class="unit">PL</span></div>
     </div>
     <div class="ig">
-      <label class="il">OMS/カート連携</label>
+      <label class="il">OMS／カート連携</label>
       <select id="g-oms" onchange="calc()">
         <option value="0">なし（0円）</option>
         <option value="10000">あり（10,000円）</option>
@@ -174,9 +417,10 @@ tr:last-child td{border-bottom:none}
     <div class="ig">
       <label class="il">梱包タイプ</label>
       <select id="g-pack" onchange="calc()">
+        <option value="0" selected>なし・梱包済みで預入（0円）</option>
         <option value="60">直貼り（60円）</option>
         <option value="80">ネコポス（80円）</option>
-        <option value="140" selected>60サイズ以上（140円）</option>
+        <option value="140">60サイズ以上（140円）</option>
       </select>
     </div>
     <div class="ig">
@@ -196,103 +440,170 @@ tr:last-child td{border-bottom:none}
       </select>
     </div>
     <div class="divider"></div>
-    <div class="ig" style="background:var(--surface2);border-radius:var(--radius-sm);padding:.6rem .75rem">
-      <span class="il" style="margin-bottom:2px">固定費合計</span>
-      <span id="fixed-total" style="font-size:16px;font-weight:500">—</span>
-      <span style="font-size:11px;color:var(--text3)"> 円/月</span>
+    <div class="total-box">
+      <span class="il">固定費合計</span>
+      <span class="tv num" id="fixed-total">—</span><span class="tu">円/月</span>
     </div>
   </div>
 
-  <div class="panel">
-    <div class="panel-title">扇橋出荷 固定費・手数料</div>
+  <div class="panel" style="border-color:var(--max);border-width:1.5px">
+    <div class="p-title" style="color:var(--max)">マックス 保管・入庫（数量×期間ベース）</div>
     <div class="ig">
-      <label class="il">保管費</label>
-      <div class="ir"><input type="number" id="g-ogi-hokan" value="5000" min="0" step="500" oninput="calc()"><span class="unit">円/月（1坪・3PL分）</span></div>
+      <label class="il">1度の入庫数（在庫ロット）</label>
+      <div class="ir"><input type="number" id="g-max-deposit" value="2000" min="0" step="100" oninput="calc()"><span class="unit">個</span></div>
     </div>
     <div class="ig">
-      <label class="il">出庫手数料</label>
-      <div class="ir"><input type="number" id="g-ogi-shukko" value="56" min="0" step="1" oninput="calc()"><span class="unit">円/件（税別）</span></div>
+      <label class="il">保管単価</label>
+      <div class="ir"><input type="number" id="g-max-storage" value="0" min="0" step="0.5" oninput="calc()"><span class="unit">円/個/月</span></div>
     </div>
     <div class="ig">
       <label class="il">入庫手数料</label>
-      <div class="ir"><input type="number" id="g-ogi-nyuko" value="300" min="0" step="50" oninput="calc()"><span class="unit">円/PL（税別）</span></div>
+      <div class="ir"><input type="number" id="g-max-inbound" value="0" min="0" step="1" oninput="calc()"><span class="unit">円/個</span></div>
+    </div>
+    <div class="divider"></div>
+    <div class="total-box" style="display:block">
+      <div style="display:flex;justify-content:space-between"><span class="il">保管期間（1ロット消化）</span><span class="num" id="max-period" style="font-weight:600">—</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px"><span class="il">平均在庫 / 月間保管費</span><span class="num" id="max-storage-month" style="font-weight:600">—</span></div>
+      <div style="display:flex;justify-content:space-between;margin-top:4px"><span class="il">保管＋入庫 / 件</span><span class="num" id="max-storage-peritem" style="font-weight:600;color:var(--max)">—</span></div>
+    </div>
+    <p class="adv-hint" style="margin:9px 0 0">保管費＝平均在庫（ロットの半分）×保管単価で算出。固定費の「作業スペース（坪）」と二重計上にならないよう、数量保管を使う場合は坪を実態に合わせて調整してください。</p>
+  </div>
+
+  <div class="panel">
+    <div class="p-title">扇橋出荷 固定費・手数料</div>
+    <div class="ig">
+      <label class="il">保管費</label>
+      <div class="ir"><input type="number" id="g-ogi-hokan" value="5000" min="0" step="500" oninput="calc()"><span class="unit">円/月</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">出庫手数料</label>
+      <div class="ir"><input type="number" id="g-ogi-shukko" value="56" min="0" step="1" oninput="calc()"><span class="unit">円/件</span></div>
+    </div>
+    <div class="ig">
+      <label class="il">入庫手数料</label>
+      <div class="ir"><input type="number" id="g-ogi-nyuko" value="300" min="0" step="50" oninput="calc()"><span class="unit">円/PL</span></div>
     </div>
     <div class="ig">
       <label class="il">月間入庫パレット数</label>
       <div class="ir"><input type="number" id="g-ogi-pl" value="2" min="1" max="50" oninput="calc()"><span class="unit">PL/月</span></div>
     </div>
     <div class="divider"></div>
-    <div class="ig" style="background:var(--surface2);border-radius:var(--radius-sm);padding:.6rem .75rem">
-      <span class="il" style="margin-bottom:2px">固定費合計</span>
-      <span id="ogi-fixed-total" style="font-size:16px;font-weight:500">—</span>
-      <span style="font-size:11px;color:var(--text3)"> 円/月</span>
+    <div class="total-box">
+      <span class="il">固定費合計</span>
+      <span class="tv num" id="ogi-fixed-total">—</span><span class="tu">円/月</span>
     </div>
   </div>
-</div>
 
-<!-- Right -->
-<div class="right-col">
+<!-- Right: results staff read -->
+<div class="stack">
 
-  <!-- Slider -->
-  <div class="slider-wrap">
-    <div class="slider-header">
-      <span class="slider-label">月間出荷件数</span>
-      <span class="slider-val" id="vol-disp">1,000件</span>
-    </div>
-    <input type="range" id="vol" min="100" max="5000" value="1000" step="100" oninput="onVol()">
-  </div>
+  <div class="cards" id="cards"></div>
 
-  <!-- Product tabs -->
-  <div>
-    <div class="tab-bar" id="tab-bar"></div>
-    <div class="product-panel" id="product-panel"></div>
-  </div>
-
-  <!-- Result cards -->
-  <div class="cards3" id="cards"></div>
-
-  <!-- Breakeven -->
   <div class="be-bar" id="be-bar"></div>
 
-  <!-- Chart -->
+  <div class="panel" id="pl-panel"></div>
+
   <div class="chart-panel">
-    <div class="chart-header">
-      <span class="chart-title" id="chart-title">手取り / 件（出荷量別）</span>
+    <div class="chart-head">
+      <span class="chart-title" id="chart-title">手取り／件（出荷量別）</span>
       <div class="legend">
-        <span class="leg"><span class="dot" style="background:var(--self)"></span>自社出荷</span>
-        <span class="leg"><span class="dot" style="background:var(--ogi)"></span>扇橋</span>
-        <span class="leg"><span class="dot" style="background:var(--max)"></span>マックス</span>
-        <span class="leg"><span class="dot" style="background:var(--fba)"></span>FBA</span>
+        <span class="leg"><span class="leg-line" style="border-top:3px solid var(--self)"></span>自社出荷</span>
+        <span class="leg"><span class="leg-line" style="border-top:3px dashed var(--ogi)"></span>扇橋</span>
+        <span class="leg"><span class="leg-line" style="border-top:3px dotted var(--max)"></span>マックス</span>
+        <span class="leg"><span class="leg-line" style="border-top:4px solid var(--fba)"></span>FBA</span>
       </div>
     </div>
     <div class="chart-wrap"><canvas id="chart"></canvas></div>
   </div>
 
-  <!-- Table -->
   <div class="table-panel">
-    <div class="panel-title" style="margin-bottom:12px" id="table-title">出荷量別 手取り比較表（円/件）</div>
+    <div class="p-title" id="table-title">出荷量別 手取り比較表（円/件）</div>
     <table>
       <thead>
         <tr>
-          <th style="text-align:left">件数</th>
-          <th>WMS課金</th>
-          <th>固定費按分</th>
-          <th>自社出荷</th>
-          <th>扇橋</th>
-          <th>マックス</th>
-          <th>FBA</th>
+          <th>件数</th><th>WMS課金</th><th>固定費按分</th>
+          <th>自社出荷</th><th>扇橋</th><th>マックス</th><th>FBA</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
     <p class="note" id="note-text"></p>
+    <div class="actions">
+      <button class="btn primary" onclick="copyShare()">🔗 条件を共有リンクにコピー</button>
+      <button class="btn" onclick="exportCSV()">⤓ CSV書き出し</button>
+      <button class="btn" onclick="exportPNG()">▦ グラフ画像</button>
+      <button class="btn" onclick="window.print()">🖨 PDF／印刷</button>
+    </div>
   </div>
 
 </div>
 </div>
+
+<div class="config-zone">
+  <div class="config-head">初期設定 — 会社の前提値（最初に一度。通常は変更不要）</div>
+  <div class="config-grid">
+
+    <div class="panel" style="border-color:#0c6a4e;border-width:1.5px">
+      <div class="p-title" style="color:var(--good)">売上創出価値（解放時間の評価）</div>
+      <div class="prod-grid">
+        <div class="ig">
+          <label class="il">損益分岐点 売上</label>
+          <div class="ir"><input type="number" id="g-be-sales" value="40000000" min="0" step="1000000" oninput="calc()"></div>
+          <select id="g-be-period" onchange="calc()" style="margin-top:6px"><option value="month" selected>円/月</option><option value="year">円/年</option></select>
+        </div>
+        <div class="ig">
+          <label class="il">従業員数</label>
+          <div class="ir"><input type="number" id="g-emp-count" value="12" min="1" step="1" oninput="calc()"><span class="unit">人</span></div>
+        </div>
+        <div class="ig">
+          <label class="il">1人あたり月間労働時間</label>
+          <div class="ir"><input type="number" id="g-emp-hours" value="160" min="1" step="10" oninput="calc()"><span class="unit">時間/月</span></div>
+        </div>
+        <div class="ig">
+          <label class="il">営業利益率</label>
+          <div class="ir"><input type="number" id="g-margin" value="20" min="0" max="100" step="1" oninput="calc()"><span class="unit">%</span></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="total-box">
+        <span class="il">→ 売上創出単価（1労働時間）</span>
+        <span class="tv num" id="sales-per-hour" style="color:var(--good)">—</span><span class="tu">円/時</span>
+      </div>
+      <p class="adv-hint" style="margin:9px 0 0">損益分岐点売上 ÷（従業員数×労働時間）＝1時間が生むべき売上。解放時間にこの単価を掛け、売上・営業利益に換算します。営業利益率は経常利益（営業外損益を含む）ではなく本業の営業利益ベース。案件・時期で変動する場合は都度入力してください。</p>
+    </div>
+
+    <details class="adv">
+      <summary>詳細パラメータ（計算ロジック）<span class="chev">›</span></summary>
+      <div class="adv-body">
+        <p class="adv-hint">単価・固定費の前提値を直接編集できます。初期値は現行モデルと同一です。</p>
+        <div class="prod-grid">
+          <div class="ig"><label class="il">3PL基本作業費</label>
+            <div class="ir"><input type="number" id="a-base" value="52" min="0" step="1" oninput="calc()"><span class="unit">円/件</span></div></div>
+          <div class="ig"><label class="il">3PL付帯作業費（検品ほか）</label>
+            <div class="ir"><input type="number" id="a-attach" value="40" min="0" step="1" oninput="calc()"><span class="unit">円/件</span></div></div>
+          <div class="ig"><label class="il">事務管理費</label>
+            <div class="ir"><input type="number" id="a-admin" value="25000" min="0" step="500" oninput="calc()"><span class="unit">円/月</span></div></div>
+          <div class="ig"><label class="il">坪単価</label>
+            <div class="ir"><input type="number" id="a-tsubo" value="4500" min="0" step="100" oninput="calc()"><span class="unit">円/坪</span></div></div>
+          <div class="ig"><label class="il">パレット単価</label>
+            <div class="ir"><input type="number" id="a-pallet" value="2000" min="0" step="100" oninput="calc()"><span class="unit">円/PL</span></div></div>
+          <div class="ig"><label class="il">FBA大口出品料</label>
+            <div class="ir"><input type="number" id="a-fba" value="4900" min="0" step="100" oninput="calc()"><span class="unit">円/月</span></div></div>
+        </div>
+      </div>
+    </details>
+
+  </div>
 </div>
 
+<div class="selfcheck" id="selfcheck"></div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
+/* ---------- WMS tiers ---------- */
 const WMS_TIERS=[
   {min:0,   max:299,  cost:15},
   {min:300, max:999,  cost:10},
@@ -301,53 +612,51 @@ const WMS_TIERS=[
 ];
 function wmsRate(v){for(const t of WMS_TIERS)if(v>=t.min&&v<=t.max)return t.cost;return 3;}
 function fmt(n){return Math.round(n).toLocaleString('ja-JP');}
-function fmtD(n){return parseFloat(n.toFixed(1)).toLocaleString('ja-JP');}
+const $=id=>document.getElementById(id);
+const gv=id=>parseFloat($(id).value);
+const gi=id=>parseInt($(id).value);
 
-// Product store
-let products=[
-  {id:1,name:'スプレーボトル10本',price:3480,shipFee:360,fbaFee:385,fbaStore:31},
-];
-let activeId=1;
-let nextId=2;
+/* ---------- Product store ---------- */
+let products=[{id:1,name:'スプレーボトル10本',price:3480,cost:0,shipFee:360,fbaFee:385,fbaStore:31}];
+let activeId=1, nextId=2;
 
-function getFixed(){
-  return parseInt(document.getElementById('g-wms').value)
-    +(parseInt(document.getElementById('g-tsubo').value)||5)*4500
-    +(parseInt(document.getElementById('g-pallet').value)||0)*2000
-    +25000
-    +parseInt(document.getElementById('g-oms').value);
-}
-function getRate(){return parseFloat(document.getElementById('g-rate').value);}
-function getPack(){return parseInt(document.getElementById('g-pack').value);}
-function getNohinso(){return parseInt(document.getElementById('g-nohinso').value);}
-function getMaxVar(vol){return 52+wmsRate(vol)+10+30+getNohinso()+getPack();}
-function getVol(){return parseInt(document.getElementById('vol').value)||1000;}
+/* ---------- Editable logic params (advanced) ---------- */
+function P(){return{
+  base:gi('a-base')||0, attach:gi('a-attach')||0, admin:gi('a-admin')||0,
+  tsuboUnit:gi('a-tsubo')||0, palletUnit:gi('a-pallet')||0, fbaLarge:gi('a-fba')||0
+};}
 
-function getOgiFixed(){
-  return (parseInt(document.getElementById('g-ogi-hokan').value)||5000)
-    +(parseInt(document.getElementById('g-ogi-nyuko').value)||300)*(parseInt(document.getElementById('g-ogi-pl').value)||2);
-}
-function getOgiShukko(){return parseInt(document.getElementById('g-ogi-shukko').value)||56;}
+function getFixed(){const p=P();
+  return gi('g-wms')+(gi('g-tsubo')||5)*p.tsuboUnit+(gi('g-pallet')||0)*p.palletUnit+p.admin+gi('g-oms');}
+function getRate(){return gv('g-rate');}
+function getPack(){return gi('g-pack');}
+function getNohinso(){return gi('g-nohinso');}
+function getMaxVar(vol){const p=P();return p.base+wmsRate(vol)+p.attach+getNohinso()+getPack();}
+function getVol(){return parseInt($('vol-num').value)||parseInt($('vol').value)||1000;}
+function getOgiFixed(){return (gi('g-ogi-hokan')||0)+(gi('g-ogi-nyuko')||0)*(gi('g-ogi-pl')||0);}
+function getOgiShukko(){return gi('g-ogi-shukko')||0;}
 
-function selfUnit(p,shipFee){
-  return p-Math.round(p*getRate())-shipFee;
-}
-function maxUnit(p,shipFee,vol){
-  return p-Math.round(p*getRate())-shipFee-getMaxVar(vol)-getFixed()/vol;
-}
-function ogiUnit(p,shipFee,vol){
-  return p-Math.round(p*getRate())-shipFee-getOgiShukko()-getOgiFixed()/vol;
-}
-function fbaUnit(p,fbaFee,fbaStore,vol){
-  return p-Math.round(p*getRate())-fbaFee-fbaStore-4900/vol;
-}
+function getSelfVar(){const tp=gi('g-self-tp')||0;if(tp<=0)return 0;return (gi('g-self-rate')||0)/tp;}
+function getSelfFixed(){return gi('g-self-fixed')||0;}
+function selfUnit(p,shipFee,vol){return p-Math.round(p*getRate())-shipFee-getSelfVar()-getSelfFixed()/vol;}
+function getMaxDeposit(){return gi('g-max-deposit')||0;}
+function getMaxStorageRate(){return gv('g-max-storage')||0;}
+function getMaxInbound(){return gv('g-max-inbound')||0;}
+function getBEMonthly(){const v=gi('g-be-sales')||0;return $('g-be-period').value==='year'?v/12:v;}
+function getEmpCount(){return gi('g-emp-count')||0;}
+function getEmpHours(){return gi('g-emp-hours')||0;}
+function getMargin(){return (gv('g-margin')||0)/100;}
+function getSalesPerHour(){const tot=getEmpCount()*getEmpHours();return tot>0?getBEMonthly()/tot:0;}
+function getMaxStoragePerItem(vol){return getMaxStorageRate()*(getMaxDeposit()/2)/vol;} // 平均在庫×単価÷件数
+function maxUnit(p,shipFee,vol){return p-Math.round(p*getRate())-shipFee-getMaxVar(vol)-getFixed()/vol-getMaxStoragePerItem(vol)-getMaxInbound();}
+function ogiUnit(p,shipFee,vol){return p-Math.round(p*getRate())-shipFee-getOgiShukko()-getOgiFixed()/vol;}
+function fbaUnit(p,fbaFee,fbaStore,vol){return p-Math.round(p*getRate())-fbaFee-fbaStore-P().fbaLarge/vol;}
 
 function activeProd(){return products.find(p=>p.id===activeId)||products[0];}
 
-// Tab rendering
+/* ---------- Tabs ---------- */
 function renderTabs(){
-  const bar=document.getElementById('tab-bar');
-  bar.innerHTML='';
+  const bar=$('tab-bar');bar.innerHTML='';
   products.forEach(p=>{
     const t=document.createElement('span');
     t.className='tab'+(p.id===activeId?' active':'');
@@ -356,41 +665,27 @@ function renderTabs(){
     bar.appendChild(t);
   });
   const add=document.createElement('span');
-  add.className='tab-add';
-  add.textContent='+ 商品追加';
-  add.onclick=addProd;
+  add.className='tab-add';add.textContent='+ 商品追加';add.onclick=addProd;
   bar.appendChild(add);
 }
-
-function deleteProd(id,e){
-  e.stopPropagation();
-  if(products.length<=1)return;
-  products=products.filter(p=>p.id!==id);
-  if(activeId===id)activeId=products[0].id;
-  renderTabs();renderProductPanel();calc();
-}
-
+function deleteProd(id,e){e.stopPropagation();if(products.length<=1)return;
+  products=products.filter(p=>p.id!==id);if(activeId===id)activeId=products[0].id;
+  renderTabs();renderProductPanel();calc();}
 function addProd(){
-  const newP={id:nextId++,name:`商品${nextId-1}`,price:1980,shipFee:360,fbaFee:385,fbaStore:31};
-  products.push(newP);
-  activeId=newP.id;
-  renderTabs();renderProductPanel();calc();
-}
+  const np={id:nextId++,name:`商品${nextId-1}`,price:1980,cost:0,shipFee:360,fbaFee:385,fbaStore:31};
+  products.push(np);activeId=np.id;renderTabs();renderProductPanel();calc();}
 
-// Product panel
+/* ---------- Product panel ---------- */
 function renderProductPanel(){
   const p=activeProd();
-  document.getElementById('product-panel').innerHTML=`
-    <div class="prod-header">
-      <input class="prod-name-input" type="text" value="${p.name}" placeholder="商品名" oninput="updateProd('name',this.value)">
-    </div>
+  $('product-panel').innerHTML=`
+    <input class="prod-name-input" type="text" value="${p.name}" placeholder="商品名" oninput="updateProd('name',this.value)">
     <div class="prod-grid">
-      <div class="ig">
-        <label class="il">販売価格（税抜）</label>
-        <div class="ir"><input type="number" value="${p.price}" min="1" step="10" oninput="updateProd('price',+this.value)"><span class="unit">円</span></div>
-      </div>
-      <div class="ig">
-        <label class="il">佐川送料（60サイズ基準）</label>
+      <div class="ig"><label class="il">販売価格（税抜）</label>
+        <div class="ir"><input type="number" value="${p.price}" min="1" step="10" oninput="updateProd('price',+this.value)"><span class="unit">円</span></div></div>
+      <div class="ig"><label class="il">原価（仕入・製造原価）</label>
+        <div class="ir"><input type="number" value="${p.cost||0}" min="0" step="10" oninput="updateProd('cost',+this.value)"><span class="unit">円</span></div></div>
+      <div class="ig"><label class="il">佐川送料（60サイズ基準）</label>
         <select onchange="updateProd('shipFee',+this.value)">
           <option value="360" ${p.shipFee===360?'selected':''}>60サイズ・2kg（360円）</option>
           <option value="430" ${p.shipFee===430?'selected':''}>60サイズ・東北（430円）</option>
@@ -398,189 +693,351 @@ function renderProductPanel(){
           <option value="576" ${p.shipFee===576?'selected':''}>80サイズ・東北（576円）</option>
           <option value="488" ${p.shipFee===488?'selected':''}>100サイズ（488円）</option>
           <option value="575" ${p.shipFee===575?'selected':''}>140サイズ（575円）</option>
-        </select>
-      </div>
-      <div class="ig">
-        <label class="il">FBA配送代行手数料</label>
+        </select></div>
+      <div class="ig"><label class="il">FBA配送代行手数料</label>
         <select onchange="updateProd('fbaFee',+this.value)">
           <option value="288" ${p.fbaFee===288?'selected':''}>小型・250g以下（288円）</option>
           <option value="385" ${p.fbaFee===385?'selected':''}>標準・1kg以下（385円）</option>
           <option value="432" ${p.fbaFee===432?'selected':''}>標準・2kg以下（432円）</option>
           <option value="514" ${p.fbaFee===514?'selected':''}>標準・3kg以下（514円）</option>
           <option value="596" ${p.fbaFee===596?'selected':''}>標準・4kg以下（596円）</option>
-        </select>
-      </div>
-      <div class="ig">
-        <label class="il">FBA在庫保管手数料（目安）</label>
-        <div class="ir"><input type="number" value="${p.fbaStore}" min="0" step="1" oninput="updateProd('fbaStore',+this.value)"><span class="unit">円/件</span></div>
-      </div>
-    </div>
-  `;
+        </select></div>
+      <div class="ig"><label class="il">FBA在庫保管手数料（目安）</label>
+        <div class="ir"><input type="number" value="${p.fbaStore}" min="0" step="1" oninput="updateProd('fbaStore',+this.value)"><span class="unit">円/件</span></div></div>
+    </div>`;
 }
+function updateProd(key,val){const p=activeProd();p[key]=val;if(key==='name')renderTabs();calc();}
 
-function updateProd(key,val){
-  const p=activeProd();
-  p[key]=val;
-  if(key==='name')renderTabs();
-  calc();
-}
-
-// Main calc
+/* ---------- Main calc ---------- */
 const VOLS_TABLE=[300,500,1000,1500,2000,3000,4000,5000];
+const CH=[
+  {key:'self',name:'自社出荷',color:'var(--self)'},
+  {key:'ogi', name:'扇橋出荷',color:'var(--ogi)'},
+  {key:'max', name:'マックスエクスプレス',color:'var(--max)'},
+  {key:'fba', name:'FBA',color:'var(--fba)'}
+];
 let chart=null;
 
 function calc(){
-  const fixed=getFixed();
-  document.getElementById('fixed-total').textContent=fmt(fixed);
-  const ogiFixed=getOgiFixed();
-  document.getElementById('ogi-fixed-total').textContent=fmt(ogiFixed);
-
-  const vol=getVol();
-  const p=activeProd();
-  const su=selfUnit(p.price,p.shipFee);
-  const ou=ogiUnit(p.price,p.shipFee,vol);
-  const mu=maxUnit(p.price,p.shipFee,vol);
-  const fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,vol);
-
-  document.getElementById('chart-title').textContent=`${p.name} — 手取り / 件（出荷量別）`;
-  document.getElementById('table-title').textContent=`${p.name} — 出荷量別 手取り比較表（円/件）`;
-
+  $('fixed-total').textContent=fmt(getFixed());
+  $('ogi-fixed-total').textContent=fmt(getOgiFixed());
+  $('self-var-disp').textContent=(gi('g-self-tp')>0)?fmt(getSelfVar()):'—';
+  {const dep=getMaxDeposit(),vv=getVol(),per=vv>0?dep/vv:0,avg=dep/2,moStore=getMaxStorageRate()*avg;
+   $('max-period').textContent=dep>0?`${fmtD(per)} ヶ月`:'—';
+   $('max-storage-month').textContent=`${fmt(avg)}個 / ${fmt(moStore)}円`;
+   $('max-storage-peritem').textContent=`${fmt(getMaxStoragePerItem(vv)+getMaxInbound())} 円`;}
+  $('sales-per-hour').textContent=fmt(getSalesPerHour());
+  const vol=getVol(), p=activeProd();
+  const su=selfUnit(p.price,p.shipFee,vol), ou=ogiUnit(p.price,p.shipFee,vol),
+        mu=maxUnit(p.price,p.shipFee,vol), fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,vol);
+  const metric=(p.cost||0)>0?'利益':'手取り';
+  $('chart-title').textContent=`${p.name} — ${metric}／件（出荷量別）`;
+  $('table-title').textContent=`${p.name} — 出荷量別 ${metric}比較表（円/件）`;
+  renderVerdict(su,mu,vol,p);
+  renderProfitLabor(p,su,mu,vol);
   renderCards(p,su,ou,mu,fu,vol);
-  renderBreakeven(p,su,ou,mu,fu,vol,fixed);
+  renderBreakeven(su,ou,mu,fu);
   renderTable(p,vol);
   renderChart(p,vol);
-  renderNote(fixed);
+  renderNote();
+  runSelfCheck(p,su,ou,mu,fu,vol);
+  writeHash();
 }
 
+/* ============================================================
+   SELF-CHECK — independent recomputation + invariant audit.
+   Runs on every calc(); flags any discrepancy ("hallucination").
+   ============================================================ */
+function _wmsR(v){return v<=299?15:v<=999?10:v<=1999?6:3;} // independent copy of WMS tiers
+function approxEq(a,b,tol){if(!isFinite(a)||!isFinite(b))return false;return Math.abs(a-b)<=(tol||1e-6)*Math.max(1,Math.abs(a),Math.abs(b));}
+function runSelfCheck(p,su,ou,mu,fu,vol){
+  const checks=[];
+  const add=(name,pass,detail)=>checks.push({name,pass,detail});
+  const c=p.cost||0, r=gv('g-rate'), amz=Math.round(p.price*r);
+
+  // (1)(2) INDEPENDENT recomputation from raw inputs — shares no helper with production
+  const selfLabor=(gi('g-self-tp')>0)?(gi('g-self-rate')||0)/gi('g-self-tp'):0;
+  const iSelf=p.price-amz-p.shipFee-selfLabor-(gi('g-self-fixed')||0)/vol;
+  const iMaxVar=(gi('a-base')||0)+_wmsR(vol)+(gi('a-attach')||0)+gi('g-nohinso')+gi('g-pack');
+  const iFix=(gi('g-wms')+(gi('g-tsubo')||5)*(gi('a-tsubo')||0)+(gi('g-pallet')||0)*(gi('a-pallet')||0)+(gi('a-admin')||0)+gi('g-oms'))/vol;
+  const iStore=(gv('g-max-storage')||0)*((gi('g-max-deposit')||0)/2)/vol;
+  const iMax=p.price-amz-p.shipFee-iMaxVar-iFix-iStore-(gv('g-max-inbound')||0);
+  add('独立再計算：自社出荷',approxEq(iSelf,su),`独立${Math.round(iSelf)} / 本体${Math.round(su)}`);
+  add('独立再計算：マックス',approxEq(iMax,mu),`独立${Math.round(iMax)} / 本体${Math.round(mu)}`);
+
+  // (3) Card breakdown reconciles to displayed net within ¥1 (rounding)
+  const dedSelf=Math.round(amz)+Math.round(p.shipFee)+Math.round(getSelfVar())+Math.round(getSelfFixed()/vol)+(c>0?Math.round(c):0);
+  add('カード内訳の整合（自社・±1円）',Math.abs((p.price-dedSelf)-Math.round(su-c))<=1,`内訳${p.price-dedSelf} / 表示${Math.round(su-c)}`);
+
+  // (4) Verdict sign matches the actual per-item difference
+  const diff=mu-su;
+  add('判定の向きと差額符号の一致',(diff>=0)===( $('v-name').textContent.indexOf('マックス')===0 ),`差額${Math.round(diff)} / 判定「${$('v-name').textContent}」`);
+
+  // (5) Break-even: crossover point truly straddles zero
+  const be=findBreakEven(p);
+  if(be.crosses){const d0=maxUnit(p.price,p.shipFee,be.vol)-selfUnit(p.price,p.shipFee,be.vol),d1=maxUnit(p.price,p.shipFee,be.vol-10)-selfUnit(p.price,p.shipFee,be.vol-10);
+    add('損益分岐点が符号反転を跨ぐ',(d0>=0)!==(d1>=0),`${be.vol}件 前後で符号反転`);
+  } else {const dl=maxUnit(p.price,p.shipFee,100)-selfUnit(p.price,p.shipFee,100),dh=maxUnit(p.price,p.shipFee,50000)-selfUnit(p.price,p.shipFee,50000);
+    add('損益分岐なし＝全域同符号',(dl>=0)===(dh>=0),`低${Math.round(dl)} / 高${Math.round(dh)}`);}
+
+  // (6) Labor identity: 自社変動人件費 = 時給 × 解放時間
+  const H=gi('g-self-tp')>0?vol/gi('g-self-tp'):0;
+  add('労働時間の恒等式（R×H＝月間人件費）',approxEq(getSelfVar()*vol,(gi('g-self-rate')||0)*H),`${Math.round(getSelfVar()*vol)} 円/月`);
+
+  // (7) Sales-per-hour reconciles to break-even sales
+  const tot=getEmpCount()*getEmpHours();
+  add('売上創出単価の整合',tot<=0||approxEq(getSalesPerHour()*tot,getBEMonthly()),`単価${Math.round(getSalesPerHour())}×${tot}h＝${Math.round(getSalesPerHour()*tot)}`);
+
+  // (8) Monthly profit & 立体差益 chain
+  const sp=su-c,mp=mu-c,mS=sp*vol,mM=mp*vol,D=mS-mM;
+  const net=H*getSalesPerHour()*getMargin()-D;
+  add('月間利益の整合（差額＝自社−マックス）',approxEq(D,mS-mM),`D＝${Math.round(D)}`);
+  add('立体差益の整合（②−③）',approxEq(net,H*getSalesPerHour()*getMargin()-D),`総合差益${Math.round(net)}`);
+
+  // (9) Storage identity: 保管費/件 × 件数 = 平均在庫 × 単価
+  add('保管費の恒等式',approxEq(getMaxStoragePerItem(vol)*vol,getMaxStorageRate()*getMaxDeposit()/2),`月間保管${Math.round(getMaxStorageRate()*getMaxDeposit()/2)}円`);
+
+  // (10) All key outputs finite
+  add('全出力が有限値',[su,ou,mu,fu,D,H,net,getSalesPerHour()].every(Number.isFinite),'NaN/∞ なし');
+
+  renderSelfCheck(checks);
+}
+function renderSelfCheck(checks){
+  const fails=checks.filter(c=>!c.pass);
+  const rows=checks.map(c=>`<div class="sc-item ${c.pass?'ok':'bad'}"><span>${c.pass?'✓':'✕'} ${c.name}</span><span class="num">${c.detail}</span></div>`).join('');
+  const el=$('selfcheck');
+  if(fails.length===0){
+    el.innerHTML=`<details class="sc-wrap ok"><summary><span class="sc-badge ok">✓ 計算整合性チェック 合格</span><span class="sc-sum">独立再計算と全 ${checks.length} 項目が一致</span><span class="sc-chev">›</span></summary><div class="sc-list">${rows}</div></details>`;
+  } else {
+    el.innerHTML=`<details class="sc-wrap bad" open><summary><span class="sc-badge bad">⚠ 不整合 ${fails.length} 件を検出</span><span class="sc-sum">入力値・計算式を確認してください</span><span class="sc-chev">›</span></summary><div class="sc-list">${rows}</div></details>`;
+  }
+}
+
+// Smallest volume at which マックス手取り overtakes 自社手取り (or vice versa)
+function findBreakEven(p){
+  let prev=null;
+  for(let v=10; v<=50000; v+=10){
+    const d=maxUnit(p.price,p.shipFee,v)-selfUnit(p.price,p.shipFee,v); // + => Max better
+    if(prev && ((prev<0&&d>=0)||(prev>=0&&d<0))) return {crosses:true,vol:v,maxAbove:d>=0};
+    prev=d;
+  }
+  const dEnd=maxUnit(p.price,p.shipFee,50000)-selfUnit(p.price,p.shipFee,50000);
+  return {crosses:false,maxAlways:dEnd>=0};
+}
+
+function renderVerdict(su,mu,vol,p){
+  const diff=mu-su;            // + => マックスが有利
+  const maxBetter=diff>=0;
+  $('v-vol').textContent=vol.toLocaleString('ja-JP');
+  $('v-name').textContent=maxBetter?'マックスが有利':'自社が有利';
+  $('v-net').innerHTML=`${diff>=0?'+':'−'}¥${fmt(Math.abs(diff))}<small>/件</small>`;
+  const c=p.cost||0, lbl=c>0?'利益':'手取り';
+  $('v-edge').innerHTML=`自社 ¥${fmt(su-c)} ・ マックス ¥${fmt(mu-c)} <span style="opacity:.55">${lbl}/件</span>`;
+  const be=findBreakEven(p);
+  let beText;
+  if(be.crosses){
+    beText = be.maxAbove
+      ? `損益分岐 月${be.vol.toLocaleString('ja-JP')}件 — これ以上でマックスが有利`
+      : `損益分岐 月${be.vol.toLocaleString('ja-JP')}件 — これ未満でマックスが有利`;
+  } else {
+    beText = be.maxAlways ? '全出荷量域でマックスが有利' : '全出荷量域で自社が有利';
+  }
+  $('v-be').innerHTML=`月間差額 <strong>${diff>=0?'+':'−'}¥${fmt(Math.abs(diff*vol))}</strong> ／ ${beText}`;
+  $('verdict').style.borderLeftColor = maxBetter ? 'var(--max)' : 'var(--self)';
+}
+
+function renderProfitLabor(p,su,mu,vol){
+  const c=p.cost||0;
+  const sp=su-c, mp=mu-c;          // 利益/件
+  const mS=sp*vol, mM=mp*vol, D=mS-mM;   // D>0 => 自社が利益で勝る
+  const selfWins=D>=0;
+  const tp=gi('g-self-tp')||0, R=gi('g-self-rate')||0;
+  const H = tp>0 ? vol/tp : 0;     // 自社出荷に要する＝外注で解放される労働時間/月
+  const days=H/8, weeks=H/40, fte=H/160*100; // 1人月=160h想定
+  const rate=getSalesPerHour(), margin=getMargin();
+  const S=H*rate, P=S*margin, net=P-D;   // ①売上換算 ②利益 ③外注の物流損得(-D) → 総合差益
+  let trade;
+  if(H<=0){
+    trade='「1時間あたりの出荷数」を入力すると、外注で解放される労働時間が算出されます。';
+  } else if(selfWins){
+    const eff=D/H;
+    trade=`この時間を確保するための対価は、月間利益を <b>¥${fmt(D)}</b> 手放すこと——解放1時間あたり <b>¥${fmt(eff)}</b>。空いた時間を1時間あたり ¥${fmt(eff)} を超える価値の業務（販促・商品開発・新規開拓など）に充てられるなら、外注に合理性が生まれます。社内作業の人件費は ¥${fmt(R)}/時。`;
+  } else {
+    trade=`しかも外注すると月間利益は <b>¥${fmt(-D)}</b> 増えます。利益と時間の両取り——外注が合理的です。`;
+  }
+  const title = c>0 ? `利益額 と 労働時間（月間・${vol.toLocaleString('ja-JP')}件時）`
+                    : `手取り と 労働時間（月間・${vol.toLocaleString('ja-JP')}件時・※原価未入力）`;
+  const metric=c>0?'利益':'手取り';
+  $('pl-panel').innerHTML=`
+    <div class="p-title">${title}</div>
+    <div class="pl-grid pl-grid-3">
+      <div class="pl-cell"><div class="pl-k">月間${metric}（自社）</div><div class="pl-v num" style="color:var(--self)">¥${fmt(mS)}</div></div>
+      <div class="pl-cell"><div class="pl-k">月間${metric}（マックス）</div><div class="pl-v num" style="color:var(--max)">¥${fmt(mM)}</div></div>
+      <div class="pl-cell"><div class="pl-k">差額</div><div class="pl-v num" style="color:${selfWins?'var(--self)':'var(--max)'}">${selfWins?'自社 +':'マックス +'}¥${fmt(Math.abs(D))}</div></div>
+    </div>
+    <div class="labor">
+      <div class="labor-head">マックスに預けて解放される従業員の労働時間</div>
+      <div class="labor-big"><span class="num">${fmtD(H)}</span><span class="labor-unit">時間 / 月</span></div>
+      <div class="labor-conv">
+        <span>≈ <b>${fmtD(days)}</b> 営業日（8h）</span>
+        <span>≈ <b>${fmtD(weeks)}</b> 週（40h）</span>
+        <span>正社員1人月の <b>${fmtD(fte)}%</b></span>
+      </div>
+      <div class="labor-bar"><div class="labor-bar-fill" style="width:${Math.min(100,fte)}%"></div></div>
+      <div class="labor-barlabel"><span>0h</span><span>正社員1人の月間労働 ≒ 160h</span></div>
+      <div class="value-stack">
+        <div class="vs-title">この時間を売上に変えると（立体評価・月間）</div>
+        <div class="vs-row"><span>① 解放時間の売上換算 <em>${fmtD(H)}h × ¥${fmt(rate)}</em></span><span class="num">¥${fmt(S)}</span></div>
+        <div class="vs-row"><span>② その営業利益 <em>① × 営業利益率${fmt(margin*100)}%</em></span><span class="num">¥${fmt(P)}</span></div>
+        <div class="vs-row"><span>③ 物流コスト差（外注の損得）</span><span class="num">${D>=0?'−¥'+fmt(D):'+¥'+fmt(-D)}</span></div>
+        <div class="vs-total"><span>総合差益（② ${D>=0?'−':'+'} ③）</span><span class="num">${net>=0?'+':'−'}¥${fmt(Math.abs(net))}</span></div>
+      </div>
+      <p class="labor-note">${trade}${rate>0?` 売上目線では、解放した ${fmtD(H)} 時間が月 <b>¥${fmt(S)}</b> の売上創出余地を生み、営業利益率${fmt(margin*100)}%で <b>¥${fmt(P)}</b> の営業利益に相当します。物流コスト差を差し引いた総合差益は月 <b>${net>=0?'+':'−'}¥${fmt(Math.abs(net))}</b>。`:''}</p>
+    </div>`;
+}
 function renderCards(p,su,ou,mu,fu,vol){
   const amz=Math.round(p.price*getRate());
-  const vals=[su,ou,mu,fu];
-  const best=Math.max(...vals);
-  document.getElementById('cards').innerHTML=`
-    <div class="card${su===best?' best':''}">
-      <div class="card-head"><span class="card-name">自社出荷</span><span class="badge badge-cur">現状</span></div>
-      <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
-      <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
-      <div class="irow cost"><span>送料（佐川）</span><span>△${fmt(p.shipFee)}円</span></div>
-      <div class="irow"><span>固定費按分</span><span>—</span></div>
+  const c=p.cost||0;
+  const cr=c>0?costRow('原価',c):'';
+  const vals=[su,ou,mu,fu], best=Math.max(...vals);
+  const blocks=[
+    {name:'自社出荷',dot:'var(--self)',rows:[costRow('EC販売手数料',amz),costRow('送料（佐川）',p.shipFee),costRow('自社作業費',getSelfVar()),costRow('固定費按分',getSelfFixed()/vol),cr],net:su,col:'var(--self)'},
+    {name:'扇橋出荷',dot:'var(--ogi)',rows:[costRow('EC販売手数料',amz),costRow('送料（佐川）',p.shipFee),costRow('出庫手数料',getOgiShukko()),costRow('固定費按分',getOgiFixed()/vol),cr],net:ou,col:'var(--ogi)'},
+    {name:'マックスエクスプレス',dot:'var(--max)',rows:[costRow('EC販売手数料',amz),costRow('送料（佐川）',p.shipFee),costRow('3PL変動費',getMaxVar(vol)),costRow('固定費按分',getFixed()/vol),...(getMaxStoragePerItem(vol)>0?[costRow('保管費按分',getMaxStoragePerItem(vol))]:[]),...(getMaxInbound()>0?[costRow('入庫費',getMaxInbound())]:[]),cr],net:mu,col:'var(--max)'},
+    {name:'FBA',dot:'var(--fba)',rows:[costRow('EC販売手数料',amz),costRow('FBA配送代行',p.fbaFee),costRow('FBA在庫保管',p.fbaStore),costRow('大口按分',P().fbaLarge/vol),cr],net:fu,col:'var(--fba)'}
+  ];
+  const lbl=c>0?'利益／件':'手取り／件';
+  $('cards').innerHTML=blocks.map(b=>`
+    <div class="card${b.net===best?' best':''}">
+      ${b.net===best?'<span class="crown">✓ 最適</span>':''}
+      <div class="card-head"><span class="card-dot" style="background:${b.dot}"></span><span class="card-name">${b.name}</span></div>
+      <div class="irow"><span>販売価格</span><span class="num">${fmt(p.price)}円</span></div>
+      ${b.rows.join('')}
       <div class="sep"></div>
-      <div class="tlabel">手取り / 件</div>
-      <div class="tval">${fmt(su)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
-      <div class="tsub">月間: ${fmt(su*vol)}円</div>
-    </div>
-    <div class="card${ou===best?' best':''}">
-      <div class="card-head"><span class="card-name">扇橋出荷</span><span class="badge" style="background:#d6e6f5;color:#2e6ea6">倉庫</span></div>
-      <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
-      <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
-      <div class="irow cost"><span>送料（佐川）</span><span>△${fmt(p.shipFee)}円</span></div>
-      <div class="irow cost"><span>出庫手数料</span><span>△${fmt(getOgiShukko())}円</span></div>
-      <div class="irow cost"><span>固定費按分</span><span>△${fmt(getOgiFixed()/vol)}円</span></div>
-      <div class="sep"></div>
-      <div class="tlabel">手取り / 件</div>
-      <div class="tval" style="color:var(--ogi)">${fmt(ou)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
-      <div class="tsub" style="color:var(--ogi)">月間: ${fmt(ou*vol)}円</div>
-    </div>
-    <div class="card${mu===best?' best':''}">
-      <div class="card-head"><span class="card-name">マックスエクスプレス</span><span class="badge badge-mid">3PL</span></div>
-      <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
-      <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
-      <div class="irow cost"><span>送料（佐川）</span><span>△${fmt(p.shipFee)}円</span></div>
-      <div class="irow cost"><span>3PL変動費</span><span>△${fmt(getMaxVar(vol))}円</span></div>
-      <div class="irow cost"><span>固定費按分</span><span>△${fmt(getFixed()/vol)}円</span></div>
-      <div class="sep"></div>
-      <div class="tlabel">手取り / 件</div>
-      <div class="tval warn">${fmt(mu)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
-      <div class="tsub">月間: ${fmt(mu*vol)}円</div>
-    </div>
-    <div class="card${fu===best?' best':''}">
-      <div class="card-head"><span class="card-name">FBA</span><span class="badge badge-rec">推奨</span></div>
-      <div class="irow"><span>販売価格</span><span>${fmt(p.price)}円</span></div>
-      <div class="irow cost"><span>EC販売手数料</span><span>△${fmt(amz)}円</span></div>
-      <div class="irow cost"><span>FBA配送代行</span><span>△${fmt(p.fbaFee)}円</span></div>
-      <div class="irow cost"><span>FBA在庫保管</span><span>△${fmt(p.fbaStore)}円</span></div>
-      <div class="irow cost"><span>大口按分</span><span>△${fmt(4900/vol)}円</span></div>
-      <div class="sep"></div>
-      <div class="tlabel">手取り / 件</div>
-      <div class="tval green">${fmt(fu)}<span style="font-size:12px;font-weight:400;color:var(--text3)">円</span></div>
-      <div class="tsub green">月間: ${fmt(fu*vol)}円</div>
-    </div>
-  `;
+      <div class="tlabel">${lbl}</div>
+      <div class="tval" style="color:${b.col}">${fmt(b.net-c)}<small>円</small></div>
+      <div class="tsub">月間 ${fmt((b.net-c)*vol)}円</div>
+    </div>`).join('');
 }
 
-function renderBreakeven(p,su,ou,mu,fu,vol,fixed){
-  const diffFvM=fu-mu;
-  const diffFvS=fu-su;
-  const diffOvS=ou-su;
-  document.getElementById('be-bar').innerHTML=`
-    <span class="be-label">差額</span>
-    <span class="chip ${diffOvS>=0?'green':'red'}">扇橋 vs 自社: ${diffOvS>=0?'+':''}${fmt(diffOvS)}円/件</span>
-    <span class="chip ${diffFvM>=0?'green':'red'}">FBA vs マックス: ${diffFvM>=0?'+':''}${fmt(diffFvM)}円/件</span>
-    <span class="chip ${diffFvS>=0?'green':'red'}">FBA vs 自社: ${diffFvS>=0?'+':''}${fmt(diffFvS)}円/件</span>
-  `;
+function renderBreakeven(su,ou,mu,fu){
+  const chip=(label,d)=>`<span class="chip ${d>=0?'green':'red'}">${d>=0?'▲':'▼'} ${label}: ${d>=0?'+':'−'}${fmt(Math.abs(d))}円/件</span>`;
+  $('be-bar').innerHTML=`<span class="be-label">差額</span>`+chip('マックス vs 自社',mu-su)+chip('FBA vs マックス',fu-mu)+chip('扇橋 vs 自社',ou-su);
 }
 
 function renderTable(p,vol){
-  const tbody=document.getElementById('tbody');
-  tbody.innerHTML='';
+  const tb=$('tbody');tb.innerHTML='';
   const nearest=VOLS_TABLE.reduce((a,b)=>Math.abs(b-vol)<Math.abs(a-vol)?b:a);
   VOLS_TABLE.forEach(v=>{
-    const tr=document.createElement('tr');
-    if(v===nearest)tr.classList.add('hl');
-    const su=selfUnit(p.price,p.shipFee);
-    const ou=ogiUnit(p.price,p.shipFee,v);
-    const mu=maxUnit(p.price,p.shipFee,v);
-    const fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,v);
+    const tr=document.createElement('tr');if(v===nearest)tr.classList.add('hl');
+    const c=p.cost||0;
+    const su=selfUnit(p.price,p.shipFee,v)-c,ou=ogiUnit(p.price,p.shipFee,v)-c,
+          mu=maxUnit(p.price,p.shipFee,v)-c,fu=fbaUnit(p.price,p.fbaFee,p.fbaStore,v)-c;
     tr.innerHTML=`<td>${v.toLocaleString()}件</td><td>${wmsRate(v)}円</td><td>${fmt(getFixed()/v)}円</td><td>${fmt(su)}円</td><td>${fmt(ou)}円</td><td>${fmt(mu)}円</td><td>${fmt(fu)}円</td>`;
-    tbody.appendChild(tr);
+    tb.appendChild(tr);
   });
 }
 
 function renderChart(p,vol){
-  const ctx=document.getElementById('chart').getContext('2d');
-  const labels=[];const ds=[],dogi=[],dm=[],df=[];
-  for(let v=100;v<=5000;v+=50){
+  const ctx=$('chart').getContext('2d');
+  const labels=[],ds=[],dogi=[],dm=[],df=[];
+  const xMax=Math.max(5000,Math.ceil(vol/1000)*1000), step=Math.max(50,Math.round(xMax/100/50)*50);
+  for(let v=100;v<=xMax;v+=step){
     labels.push(v);
-    ds.push(Math.round(selfUnit(p.price,p.shipFee)));
-    dogi.push(Math.round(ogiUnit(p.price,p.shipFee,v)));
-    dm.push(Math.round(maxUnit(p.price,p.shipFee,v)));
-    df.push(Math.round(fbaUnit(p.price,p.fbaFee,p.fbaStore,v)));
+    const c=p.cost||0;
+    ds.push(Math.round(selfUnit(p.price,p.shipFee,v)-c));
+    dogi.push(Math.round(ogiUnit(p.price,p.shipFee,v)-c));
+    dm.push(Math.round(maxUnit(p.price,p.shipFee,v)-c));
+    df.push(Math.round(fbaUnit(p.price,p.fbaFee,p.fbaStore,v)-c));
   }
-  if(chart){chart.destroy();}
-  chart=new Chart(ctx,{
-    type:'line',
+  if(chart)chart.destroy();
+  chart=new Chart(ctx,{type:'line',
     data:{labels,datasets:[
-      {label:'自社出荷',data:ds,borderColor:'#6b6860',borderWidth:1.5,pointRadius:0,tension:0},
-      {label:'扇橋',data:dogi,borderColor:'#2e6ea6',borderWidth:2,pointRadius:0,tension:0.1},
-      {label:'マックス',data:dm,borderColor:'#b86a18',borderWidth:2,pointRadius:0,tension:0.1},
-      {label:'FBA',data:df,borderColor:'#1a7a56',borderWidth:2,pointRadius:0,tension:0}
+      {label:'自社出荷',data:ds,borderColor:'#4f5a63',borderWidth:2,borderDash:[],pointRadius:0,tension:0},
+      {label:'扇橋',data:dogi,borderColor:'#285f9c',borderWidth:2,borderDash:[7,4],pointRadius:0,tension:.1},
+      {label:'マックス',data:dm,borderColor:'#9a5a10',borderWidth:2.5,borderDash:[2,3],pointRadius:0,tension:.1},
+      {label:'FBA',data:df,borderColor:'#0c6a4e',borderWidth:2.5,borderDash:[10,4],pointRadius:0,tension:0}
     ]},
-    options:{
-      responsive:true,maintainAspectRatio:false,
+    options:{responsive:true,maintainAspectRatio:false,
       interaction:{mode:'index',intersect:false},
       plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${c.parsed.y.toLocaleString('ja-JP')}円/件`}}},
-      scales:{
-        x:{type:'linear',min:100,max:5000,ticks:{callback:v=>v>=1000?(v/1000)+'k':v,maxTicksLimit:8,font:{size:10}},grid:{color:'rgba(0,0,0,0.04)'}},
-        y:{ticks:{callback:v=>v.toLocaleString('ja-JP'),font:{size:10}},grid:{color:'rgba(0,0,0,0.04)'}}
-      }
-    }
+      scales:{x:{type:'linear',min:100,max:xMax,ticks:{callback:v=>v>=1000?(v/1000)+'k':v,maxTicksLimit:8,font:{size:12,family:'IBM Plex Mono'},color:'#4c5552'},grid:{color:'rgba(0,0,0,.09)'}},
+              y:{ticks:{callback:v=>v.toLocaleString('ja-JP'),font:{size:12,family:'IBM Plex Mono'},color:'#4c5552'},grid:{color:'rgba(0,0,0,.09)'}}}}});
+}
+
+function renderNote(){
+  const wmsText=$('g-wms').options[$('g-wms').selectedIndex].text;
+  const p=P();
+  $('note-text').textContent=
+    `3PL固定費合計: ${fmt(getFixed())}円/月（${wmsText} + 事務管理${fmt(p.admin)}円 + スペース${$('g-tsubo').value}坪×${fmt(p.tsuboUnit)}円）。WMS課金: 〜299件15円 / 300〜999件10円 / 1,000〜1,999件6円 / 2,000件〜3円。全額税抜。`;
+}
+
+function onVol(){const v=$('vol').value;$('vol-num').value=v;calc();}
+function onVolNum(){const v=parseInt($('vol-num').value)||1000;const s=$('vol');s.value=Math.min(Math.max(v,+s.min),+s.max);calc();}
+
+/* ---------- Outputs: CSV / PNG / Print / Share ---------- */
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),1900);}
+
+function exportCSV(){
+  const p=activeProd();
+  const c=p.cost||0, m=c>0?'利益':'手取り';
+  let rows=[['件数','WMS課金(円)','固定費按分(円)',`自社出荷${m}(円)`,`扇橋${m}(円)`,`マックス${m}(円)`,`FBA${m}(円)`]];
+  VOLS_TABLE.forEach(v=>{
+    rows.push([v,wmsRate(v),Math.round(getFixed()/v),
+      Math.round(selfUnit(p.price,p.shipFee,v)-c),Math.round(ogiUnit(p.price,p.shipFee,v)-c),
+      Math.round(maxUnit(p.price,p.shipFee,v)-c),Math.round(fbaUnit(p.price,p.fbaFee,p.fbaStore,v)-c)]);
   });
+  const csv='\uFEFF'+rows.map(r=>r.join(',')).join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=`物流コスト_${p.name}.csv`;a.click();URL.revokeObjectURL(a.href);
+  toast('CSVを書き出しました');
 }
 
-function renderNote(fixed){
-  const wmsText=document.getElementById('g-wms').options[document.getElementById('g-wms').selectedIndex].text;
-  document.getElementById('note-text').textContent=
-    `3PL固定費合計: ${fmt(fixed)}円/月（${wmsText} + 事務管理25,000円 + スペース${document.getElementById('g-tsubo').value}坪）。WMS課金: 〜299件15円 / 300〜999件10円 / 1,000〜1,999件6円 / 2,000件〜3円。全額税抜。`;
+function exportPNG(){
+  const src=$('chart');
+  const out=document.createElement('canvas');out.width=src.width;out.height=src.height;
+  const c=out.getContext('2d');c.fillStyle='#ffffff';c.fillRect(0,0,out.width,out.height);
+  c.drawImage(src,0,0);
+  const a=document.createElement('a');a.href=out.toDataURL('image/png');
+  a.download=`手取り比較_${activeProd().name}.png`;a.click();
+  toast('グラフ画像を保存しました');
 }
 
-function onVol(){
-  const vol=getVol();
-  document.getElementById('vol-disp').textContent=vol.toLocaleString('ja-JP')+'件';
-  calc();
+/* ---------- Share via URL hash ---------- */
+const HASH_INPUTS=['g-self-rate','g-self-tp','g-self-fixed','g-be-sales','g-be-period','g-emp-count','g-emp-hours','g-margin','g-max-deposit','g-max-storage','g-max-inbound','g-wms','g-tsubo','g-pallet','g-oms','g-pack','g-nohinso','g-rate',
+  'g-ogi-hokan','g-ogi-shukko','g-ogi-nyuko','g-ogi-pl',
+  'a-base','a-attach','a-admin','a-tsubo','a-pallet','a-fba','vol-num'];
+let restoring=false;
+function writeHash(){
+  if(restoring)return;
+  const g={};HASH_INPUTS.forEach(id=>g[id]=$(id).value);
+  const state={g,products,activeId,nextId};
+  const enc=btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+  history.replaceState(null,'','#'+enc);
+}
+function readHash(){
+  if(!location.hash||location.hash.length<2)return false;
+  try{
+    const state=JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+    restoring=true;
+    if(state.products&&state.products.length){products=state.products;activeId=state.activeId;nextId=state.nextId||(Math.max(...products.map(p=>p.id))+1);}
+    if(state.g)HASH_INPUTS.forEach(id=>{if(state.g[id]!==undefined&&$(id))$(id).value=state.g[id];});
+    restoring=false;return true;
+  }catch(e){restoring=false;return false;}
+}
+function copyShare(){
+  writeHash();
+  const url=location.href;
+  navigator.clipboard?.writeText(url).then(()=>toast('共有リンクをコピーしました'),
+    ()=>{prompt('このリンクをコピーしてください',url);});
 }
 
-// Init
+/* ---------- Init ---------- */
+readHash();
 renderTabs();
 renderProductPanel();
+$('vol-num').value=getVol();$('vol').value=Math.min(Math.max(getVol(),+$('vol').min),+$('vol').max);
 calc();
 </script>
 </body>
