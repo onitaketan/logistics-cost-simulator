@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2店舗 在庫管理システム（クラウド共有版）</title>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#f4f5f5;--card:#ffffff;--soft:#eef0f0;--line:#e4e7e7;--line2:#d2d7d7;
+  --ink:#15201d;--ink2:#4c5552;--ink3:#5f6b67;
+  --akb:#285f9c;--good:#0c6a4e;--bad:#b3331d;--warn:#985a0f;
+  --dark:#15201d;--dark2:#1c2b27;
+  --r:12px;--r-sm:7px;
+  --mono:'IBM Plex Mono',ui-monospace,monospace;
+  --sans:'Noto Sans JP','Inter',-apple-system,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);min-height:100vh;padding:1.5rem 1rem 4rem;font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.page{max-width:1000px;margin:0 auto}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header{margin-bottom:1rem;display:flex;align-items:baseline;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.h-sub{font-size:12.5px;color:var(--ink2);margin-top:3px}
+.h-tag{font-family:var(--mono);font-size:11px;color:var(--ink2);border:1px solid var(--line2);border-radius:20px;padding:4px 11px}
+
+/* connection / role bar */
+.topbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.conn{font-size:12px;padding:5px 12px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:6px}
+.conn.ok{background:#d9efe6;color:var(--good)}
+.conn.bad{background:#fbe4df;color:var(--bad)}
+.conn .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.role{font-size:12px;padding:5px 12px;border-radius:20px;font-weight:600;background:var(--soft);color:var(--ink2)}
+.role.mgr{background:var(--verdict-bg,#15201d);color:#fff}
+.spacer{flex:1}
+
+.hero{background:linear-gradient(135deg,var(--dark),var(--dark2));color:#eef2f0;border-radius:var(--r);padding:1.1rem 1.3rem;margin-bottom:1.1rem}
+.hero-eyebrow{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:#b3c1bb;margin-bottom:11px;display:flex;justify-content:space-between;align-items:center}
+.hero-eyebrow button{background:rgba(255,255,255,.12);color:#eef2f0;border:none;border-radius:20px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:inherit}
+.hero-stores{display:flex;gap:14px;flex-wrap:wrap}
+.hero-store{background:rgba(255,255,255,.06);border-radius:var(--r-sm);padding:.7rem 1rem;flex:1;min-width:130px;border-left:3px solid var(--good)}
+.hero-store .hs-name{font-size:13px;color:#cdd8d3;margin-bottom:4px}
+.hero-store .hs-qty{font-family:var(--mono);font-size:26px;font-weight:600;line-height:1}
+.hero-store .hs-qty small{font-size:13px;font-weight:400;color:#9fb0aa;margin-left:3px}
+.hero-store .hs-sku{font-size:11.5px;color:#9fb0aa;margin-top:4px}
+
+.tab-bar{display:flex;align-items:center;gap:7px;margin-bottom:14px;flex-wrap:wrap}
+.tab{font-size:14px;padding:10px 16px;border:1.5px solid var(--line);border-radius:24px;cursor:pointer;background:var(--soft);color:var(--ink2);white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;gap:6px}
+.tab.active{background:var(--ink);border-color:var(--ink);color:#fff;font-weight:500}
+.tab.mgr-only{border-style:dashed}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1.25rem;margin-bottom:14px}
+.p-title{font-size:11.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
+.ig{margin-bottom:12px}
+.il{font-size:13px;color:var(--ink2);margin-bottom:5px;display:block;font-weight:500}
+input[type=number],input[type=text],input[type=search],input[type=password],input[type=date],select{font-family:inherit;font-size:15px;padding:11px 12px;min-height:44px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--soft);color:var(--ink);width:100%;outline:none}
+input.jan,input[type=number]{font-family:var(--mono)}
+input:focus,select:focus{border-color:var(--akb);box-shadow:0 0 0 3px rgba(40,95,156,.15)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.store-select{display:flex;gap:8px;flex-wrap:wrap}
+.store-pill{flex:1;min-width:120px;font-size:14px;padding:11px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--soft);color:var(--ink2);cursor:pointer;text-align:center;min-height:44px}
+.store-pill.on{background:var(--ink);color:#fff;border-color:var(--ink);font-weight:600}
+
+.btn{font-family:inherit;font-size:14px;font-weight:500;padding:12px 18px;min-height:46px;border-radius:var(--r-sm);border:1.5px solid var(--line2);background:var(--card);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn:hover{background:var(--soft)}
+.btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btn.sell{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.ok{background:var(--good);color:#fff;border-color:var(--good)}
+.btn.wide{width:100%}
+.btn.big{font-size:17px;padding:16px;min-height:58px}
+.btn.ghost{background:transparent}
+.btn.danger{color:var(--bad);border-color:#e6b9b0}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap}
+
+#reader,#reader2,#reader3{width:100%;border-radius:var(--r-sm);overflow:hidden;margin-bottom:12px;background:#000}
+#reader:empty,#reader2:empty,#reader3:empty{display:none}
+.jan-badge{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:6px 12px;border-radius:20px;font-weight:600;margin:4px 0 12px}
+.jan-badge.known{background:#d9efe6;color:var(--good)}
+.jan-badge.newp{background:#fdeccf;color:var(--warn)}
+
+.searchbar{position:relative;margin-bottom:14px}
+.searchbar input{padding-left:40px;font-size:16px}
+.searchbar .mag{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink3);font-size:17px}
+.item{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1rem 1.1rem;margin-bottom:10px}
+.item.zero{opacity:.62}
+.item.neg{border-color:#e6b9b0}
+.item-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.item-name{font-size:16px;font-weight:600;line-height:1.35}
+.item-meta{font-size:12px;color:var(--ink3);margin-top:3px;font-family:var(--mono)}
+.item-model{display:inline-block;font-size:11.5px;background:var(--soft);color:var(--ink2);padding:2px 9px;border-radius:20px;margin-top:5px;font-weight:500}
+.item-total{font-family:var(--mono);font-size:15px;font-weight:600;white-space:nowrap}
+.item-total small{font-size:11px;color:var(--ink3);font-weight:400}
+.stock-rows{display:flex;flex-direction:column;gap:7px}
+.srow{display:flex;align-items:center;gap:10px;font-size:13.5px;padding:8px 11px;background:var(--soft);border-radius:var(--r-sm)}
+.srow .sdot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.srow .sname{font-weight:500;min-width:74px}
+.srow .sqty{font-family:var(--mono);font-weight:600;font-size:15px}
+.srow .sqty.zero{color:var(--ink3);font-weight:400}
+.srow .sqty.neg{color:var(--bad)}
+.srow .sshelf{margin-left:auto;font-size:12px;color:var(--ink2);background:var(--card);border:1px solid var(--line);padding:3px 10px;border-radius:20px}
+.srow .sshelf:empty{display:none}
+.empty{text-align:center;color:var(--ink3);padding:2.5rem 1rem;font-size:14px}
+.empty .big{font-size:34px;margin-bottom:10px}
+
+.bignum{font-family:var(--mono);font-size:34px;font-weight:600;line-height:1}
+.hint{font-size:12.5px;color:var(--ink3);line-height:1.6}
+.preview{background:var(--soft);border-radius:var(--r-sm);padding:.9rem 1rem;font-size:13.5px;line-height:1.7}
+.preview b{font-family:var(--mono)}
+.callout{background:#eef4fb;border:1px solid #cfe0f2;border-radius:var(--r-sm);padding:.9rem 1rem;font-size:12.5px;color:#234;line-height:1.7}
+.callout.warn{background:#fef4e6;border-color:#f0dcbf;color:#5b4626}
+.note{font-size:12.5px;color:var(--ink3);line-height:1.7;margin-top:10px}
+
+/* reconcile table */
+.rec-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.rec-row:last-child{border-bottom:none}
+.rec-name{flex:1;font-size:14px}
+.rec-name small{display:block;color:var(--ink3);font-size:11.5px;font-family:var(--mono)}
+.rec-sold{font-family:var(--mono);font-weight:600;font-size:16px;color:var(--bad);min-width:52px;text-align:right}
+.rec-now{font-family:var(--mono);font-size:13px;color:var(--ink2);min-width:60px;text-align:right}
+.rec-fix{font-size:12px;padding:6px 10px;min-height:36px}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(10,18,15,.55);display:none;align-items:center;justify-content:center;z-index:100;padding:1rem}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border-radius:var(--r);padding:1.4rem;max-width:380px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.modal h3{font-size:17px;margin-bottom:6px}
+.modal p{font-size:13px;color:var(--ink2);margin-bottom:14px;line-height:1.6}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;padding:12px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:92vw;text-align:center;display:flex;align-items:center;gap:12px}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--bad)}
+.toast.warn{background:var(--warn)}
+.toast button{background:rgba(255,255,255,.22);border:none;color:#fff;font-family:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:16px;cursor:pointer;white-space:nowrap}
+
+.hide{display:none!important}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.tab:focus-visible,.store-pill:focus-visible{outline:3px solid #1f6feb;outline-offset:2px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+@media(max-width:560px){.grid2{grid-template-columns:1fr}h1{font-size:18px}.hero-store .hs-qty{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div>
+      <h1>2店舗 在庫管理システム</h1>
+      <div class="h-sub">クラウド共有版 — バーコードで登録・検索・売上</div>
+    </div>
+    <div class="h-tag">v1.0 / cloud</div>
+  </header>
+
+  <div class="topbar">
+    <span class="conn bad" id="conn"><span class="dot"></span><span id="connText">接続中…</span></span>
+    <span class="role" id="roleBadge">スタッフ</span>
+    <div class="spacer"></div>
+    <button class="btn ghost" id="refreshBtn" style="min-height:38px;padding:8px 14px">🔄 更新</button>
+    <button class="btn" id="mgrLoginBtn" style="min-height:38px;padding:8px 14px">🔑 店長ログイン</button>
+    <button class="btn hide" id="mgrLogoutBtn" style="min-height:38px;padding:8px 14px">ログアウト</button>
+  </div>
+
+  <div class="hero">
+    <div class="hero-eyebrow"><span>在庫サマリー（全店舗リアルタイム共有）</span></div>
+    <div class="hero-stores" id="heroStores"><div class="hint" style="color:#9fb0aa">読み込み中…</div></div>
+  </div>
+
+  <div class="tab-bar" id="tabBar">
+    <div class="tab active" data-tab="search">🔍 検索・一覧</div>
+    <div class="tab" data-tab="sell">➖ 売れた</div>
+    <div class="tab mgr-only hide" data-tab="receive">➕ 入荷</div>
+    <div class="tab mgr-only hide" data-tab="move">🔄 移動</div>
+    <div class="tab mgr-only hide" data-tab="close">✅ 締め</div>
+    <div class="tab mgr-only hide" data-tab="settings">⚙️ 設定</div>
+  </div>
+
+  <!-- SEARCH -->
+  <section id="tab-search">
+    <div class="searchbar"><span class="mag">🔍</span>
+      <input type="search" id="searchInput" placeholder="タイトル・機種名・JANで検索…" autocomplete="off"></div>
+    <div id="searchResults"></div>
+  </section>
+
+  <!-- SELL (staff) -->
+  <section id="tab-sell" class="hide">
+    <div class="panel">
+      <div class="p-title">① どの店舗で売れた？</div>
+      <div class="store-select" id="sellStore"></div>
+    </div>
+    <div class="panel">
+      <div class="p-title">② 売れた商品を読み取り</div>
+      <div id="reader"></div>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn primary" id="sellScan">📷 カメラで読み取り</button>
+        <button class="btn hide" id="sellScanStop">⏹ 停止</button>
+      </div>
+      <div class="ig"><label class="il">JANコード（手入力も可）</label>
+        <input type="text" class="jan" id="sellJan" inputmode="numeric" placeholder="例：4902370536942"></div>
+      <div id="sellTarget"></div>
+    </div>
+  </section>
+
+  <!-- RECEIVE (manager) -->
+  <section id="tab-receive" class="hide">
+    <div class="panel">
+      <div class="p-title">① どの店舗に入荷？</div>
+      <div class="store-select" id="recStore"></div>
+    </div>
+    <div class="panel">
+      <div class="p-title">② バーコード読み取り</div>
+      <div id="reader2"></div>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn primary" id="recScan">📷 カメラで読み取り</button>
+        <button class="btn hide" id="recScanStop">⏹ 停止</button>
+      </div>
+      <div class="ig"><label class="il">JANコード</label>
+        <input type="text" class="jan" id="recJan" inputmode="numeric" placeholder="例：4902370536942"></div>
+      <span id="recBadge"></span>
+    </div>
+    <div class="panel">
+      <div class="p-title">③ 商品情報</div>
+      <div class="ig"><label class="il">商品名・タイトル <span style="color:var(--bad)">*</span></label>
+        <input type="text" id="recName" placeholder="例：ゼルダの伝説 ティアーズ オブ ザ キングダム"></div>
+      <div class="grid2">
+        <div class="ig"><label class="il">機種・カテゴリ</label><input type="text" id="recModel" placeholder="例：Switch / PS5 / 本"></div>
+        <div class="ig"><label class="il">棚番号・保管場所</label><input type="text" id="recShelf" placeholder="例：A-12 / ガラスケース3段目"></div>
+      </div>
+      <div class="grid2">
+        <div class="ig"><label class="il">メモ（状態など）</label><input type="text" id="recNote" placeholder="例：美品 / 箱説あり"></div>
+        <div class="ig"><label class="il">入荷する数量</label><input type="number" id="recQty" value="1" min="1" step="1"></div>
+      </div>
+      <button class="btn primary big wide" id="recSubmit">この店舗に入荷登録</button>
+    </div>
+  </section>
+
+  <!-- MOVE (manager) -->
+  <section id="tab-move" class="hide">
+    <div class="panel">
+      <div class="p-title">① 移動する商品</div>
+      <div class="btn-row" style="margin-bottom:10px">
+        <button class="btn" id="movScan">📷 カメラで読み取り</button>
+        <button class="btn hide" id="movScanStop">⏹ 停止</button>
+      </div>
+      <div id="reader3"></div>
+      <div class="ig"><label class="il">JAN または 商品名で検索</label>
+        <input type="text" id="movSearch" placeholder="スキャン / JAN / タイトル…" autocomplete="off"></div>
+      <div id="movTarget"></div>
+    </div>
+    <div class="panel hide" id="movDetail">
+      <div class="p-title">② 移動元 → 移動先</div>
+      <div class="grid2">
+        <div class="ig"><label class="il">移動元</label><select id="movFrom"></select></div>
+        <div class="ig"><label class="il">移動先</label><select id="movTo"></select></div>
+      </div>
+      <div class="ig"><label class="il">数量</label><input type="number" id="movQty" value="1" min="1" step="1"></div>
+      <div class="preview" id="movPreview"></div>
+      <button class="btn primary big wide" id="movSubmit" style="margin-top:12px">この内容で移動</button>
+    </div>
+  </section>
+
+  <!-- CLOSE / reconcile (manager) -->
+  <section id="tab-close" class="hide">
+    <div class="panel">
+      <div class="p-title">日次の締め（売上の確定）</div>
+      <div class="grid2">
+        <div class="ig"><label class="il">店舗</label><select id="clStore"></select></div>
+        <div class="ig"><label class="il">対象日</label><input type="date" id="clDate"></div>
+      </div>
+      <div class="callout" style="margin-bottom:12px">その日にスタッフが減らした数（＝売れたはず）の一覧です。レジの売上と見比べ、違っていれば「数を修正」で正しい在庫にしてから、下の「確定」を押してください。</div>
+      <div id="clStatus"></div>
+      <div id="clList"></div>
+      <div id="clFoot"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS (manager) -->
+  <section id="tab-settings" class="hide">
+    <div class="panel">
+      <div class="p-title">店舗名の変更</div>
+      <div id="setStores"></div>
+    </div>
+    <div class="panel">
+      <div class="p-title">店長PINの変更</div>
+      <div class="grid2">
+        <div class="ig"><label class="il">現在のPIN</label><input type="password" id="pinOld" inputmode="numeric" autocomplete="off"></div>
+        <div class="ig"><label class="il">新しいPIN（4桁以上）</label><input type="password" id="pinNew" inputmode="numeric" autocomplete="off"></div>
+      </div>
+      <button class="btn" id="pinChangeBtn">PINを変更する</button>
+    </div>
+    <div class="panel">
+      <div class="p-title">この端末のスタッフ名</div>
+      <div class="ig"><input type="text" id="setActor" placeholder="例：山田"></div>
+      <div class="note">売上・入荷の記録に「誰が操作したか」として残ります。端末ごとに保存されます。</div>
+    </div>
+  </section>
+</div>
+
+<!-- Manager login modal -->
+<div class="modal-bg" id="loginModal">
+  <div class="modal">
+    <h3 id="loginTitle">店長ログイン</h3>
+    <p id="loginDesc">店長用の暗証番号（PIN）を入力してください。</p>
+    <div class="ig"><input type="password" id="loginPin" inputmode="numeric" placeholder="PIN" autocomplete="off"></div>
+    <div class="ig hide" id="loginPin2Wrap"><input type="password" id="loginPin2" inputmode="numeric" placeholder="PIN（確認のためもう一度）" autocomplete="off"></div>
+    <div class="btn-row">
+      <button class="btn primary wide" id="loginSubmit">ログイン</button>
+      <button class="btn ghost wide" id="loginCancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   接続設定（公開キー：クライアント公開OK）
+   ============================================================ */
+const SB_URL = "https://kqkfbulbravvtepqfbiu.supabase.co";
+const SB_KEY = "sb_publishable_y435jKLlmTVGD2MTM9wrBg_S9ombPgm";
+const sb = supabase.createClient(SB_URL, SB_KEY);
+
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function jstToday(){ return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Tokyo"}); } // YYYY-MM-DD
+
+/* ---- state ---- */
+let STORES=[], PRODUCTS=[], STOCK={};   // STOCK[storeId][productId]={qty,shelf}
+let MPIN=null;                          // 店長PIN（メモリのみ）
+let pollTimer=null;
+
+function actor(){ return localStorage.getItem("inv_actor")||""; }
+function setActor(v){ localStorage.setItem("inv_actor", v||""); }
+
+/* ---- toast ---- */
+let toastT;
+function toast(msg,kind,actionLabel,actionFn){
+  const t=$("#toast");
+  t.className="toast show"+(kind?(" "+kind):"");
+  t.innerHTML="<span>"+esc(msg)+"</span>";
+  if(actionLabel){ const b=document.createElement("button"); b.textContent=actionLabel;
+    b.onclick=()=>{ t.className="toast"; if(actionFn)actionFn(); }; t.appendChild(b); }
+  clearTimeout(toastT); toastT=setTimeout(()=>t.className="toast", actionLabel?6000:2800);
+}
+function errMsg(e){ return (e&&(e.message||e.hint||e.details))||"通信エラーが発生しました"; }
+
+/* ---- helpers ---- */
+function storeName(id){ const s=STORES.find(x=>x.id===id); return s?s.name:"?"; }
+function storeColor(id){ const s=STORES.find(x=>x.id===id); return s?s.color:"#5f6b67"; }
+function qtyAt(pid,sid){ return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].qty)||0; }
+function shelfAt(pid,sid){ return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].shelf)||""; }
+function totalOf(pid){ return STORES.reduce((a,s)=>a+qtyAt(pid,s.id),0); }
+function productByJan(j){ return PRODUCTS.find(p=>p.jan===j); }
+
+/* ============================================================
+   データ読み込み
+   ============================================================ */
+async function loadAll(){
+  try{
+    const [st,pr,sk]=await Promise.all([
+      sb.from("inv_stores").select("*").order("sort"),
+      sb.from("inv_products").select("*"),
+      sb.from("inv_stock").select("store_id,product_id,qty,shelf"),
+    ]);
+    if(st.error) throw st.error; if(pr.error) throw pr.error; if(sk.error) throw sk.error;
+    STORES=st.data||[]; PRODUCTS=pr.data||[];
+    STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
+    (sk.data||[]).forEach(r=>{ (STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf}; });
+    setConn(true);
+    renderHero(); renderSearch(); renderStorePills(); renderMoveSelects(); renderSettings();
+    return true;
+  }catch(e){ setConn(false); toast("読み込みに失敗："+errMsg(e),"err"); return false; }
+}
+function setConn(ok){
+  const c=$("#conn");
+  c.className="conn "+(ok?"ok":"bad");
+  $("#connText").textContent = ok?"接続OK":"未接続";
+}
+
+/* ============================================================
+   サマリー / 検索
+   ============================================================ */
+function renderHero(){
+  const el=$("#heroStores"); el.innerHTML="";
+  STORES.forEach(s=>{
+    let qty=0,sku=0;
+    PRODUCTS.forEach(p=>{ const q=qtyAt(p.id,s.id); if(q>0){qty+=q;sku++;} });
+    const d=document.createElement("div"); d.className="hero-store"; d.style.borderLeftColor=s.color;
+    d.innerHTML=`<div class="hs-name">${esc(s.name)}</div><div class="hs-qty">${qty}<small>点</small></div><div class="hs-sku">${sku} 種類</div>`;
+    el.appendChild(d);
+  });
+}
+function renderSearch(){
+  const q=($("#searchInput").value||"").trim().toLowerCase();
+  const box=$("#searchResults"); box.innerHTML="";
+  let list=PRODUCTS.slice();
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.note||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  list.sort((a,b)=>totalOf(b.id)-totalOf(a.id)||(a.name||"").localeCompare(b.name||"","ja"));
+  if(!list.length){ box.innerHTML=`<div class="empty"><div class="big">📦</div>${q?"該当する商品が見つかりません。":"まだ商品が登録されていません。店長が「入荷」から登録してください。"}</div>`; return; }
+  list.forEach(p=>{
+    const total=totalOf(p.id); const neg=STORES.some(s=>qtyAt(p.id,s.id)<0);
+    let rows="";
+    STORES.forEach(s=>{ const qy=qtyAt(p.id,s.id),sh=shelfAt(p.id,s.id);
+      rows+=`<div class="srow"><span class="sdot" style="background:${s.color}"></span><span class="sname">${esc(s.name)}</span>
+        <span class="sqty ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy} 点</span><span class="sshelf">${sh?'📍 '+esc(sh):''}</span></div>`; });
+    const d=document.createElement("div"); d.className="item"+(total<=0?" zero":"")+(neg?" neg":"");
+    d.innerHTML=`<div class="item-head"><div>
+        <div class="item-name">${esc(p.name)}</div><div class="item-meta">JAN: ${esc(p.jan)}</div>
+        ${p.model?`<span class="item-model">${esc(p.model)}</span>`:""}${p.note?`<span class="item-model">${esc(p.note)}</span>`:""}
+      </div><div class="item-total">計 ${total}<small> 点</small></div></div><div class="stock-rows">${rows}</div>`;
+    box.appendChild(d);
+  });
+}
+$("#searchInput").addEventListener("input",renderSearch);
+
+/* ============================================================
+   店舗ピル（売れた / 入荷）
+   ============================================================ */
+function curStore(key,def){ return localStorage.getItem(key)||def; }
+function renderStorePills(){
+  [["#sellStore","inv_sell_store"],["#recStore","inv_rec_store"]].forEach(([sel,key])=>{
+    const el=$(sel); if(!el) return; el.innerHTML="";
+    let cur=curStore(key, STORES[0]&&STORES[0].id);
+    if(!STORES.find(s=>s.id===cur)){ cur=STORES[0]&&STORES[0].id; }
+    STORES.forEach(s=>{ const b=document.createElement("button");
+      b.className="store-pill"+(s.id===cur?" on":""); b.textContent=s.name;
+      b.onclick=()=>{ localStorage.setItem(key,s.id); renderStorePills(); if(sel==='#sellStore') refreshSellTarget(); };
+      el.appendChild(b); });
+  });
+}
+
+/* ============================================================
+   売れた（減らす）
+   ============================================================ */
+function sellStoreId(){ return curStore("inv_sell_store", STORES[0]&&STORES[0].id); }
+function refreshSellTarget(){ onSellJan($("#sellJan").value); }
+function onSellJan(jan){
+  jan=(jan||"").trim(); $("#sellJan").value=jan;
+  const box=$("#sellTarget"); const p=productByJan(jan);
+  if(!jan){ box.innerHTML=""; return; }
+  if(!p){ box.innerHTML=`<div class="jan-badge newp">未登録の商品です。店長が「入荷」から登録してください。</div>`; return; }
+  const sid=sellStoreId(); const qy=qtyAt(p.id,sid);
+  box.innerHTML=`<div class="jan-badge known">✓ ${esc(p.name)}</div>
+    <div class="preview" style="margin-bottom:12px">${esc(storeName(sid))} の在庫： <b class="${qy<0?'':''}">${qy}</b> 点${p.model?' ／ '+esc(p.model):''}</div>
+    <div class="ig"><label class="il">売れた数量</label><input type="number" id="sellQty" value="1" min="1" step="1"></div>
+    <button class="btn sell big wide" id="sellDo">➖ ${esc(storeName(sid))}で「売れた」（在庫を減らす）</button>`;
+  $("#sellDo").onclick=()=>doSell(p);
+}
+async function doSell(p){
+  const sid=sellStoreId(); const qty=parseInt(($("#sellQty")||{}).value,10)||1;
+  if(qty<1){ toast("数量は1以上","err"); return; }
+  $("#sellDo").disabled=true;
+  const {data,error}=await sb.rpc("inv_record_sale",{p_store:sid,p_jan:p.jan,p_qty:qty,p_actor:actor()});
+  $("#sellDo").disabled=false;
+  if(error){ toast(errMsg(error),"err"); return; }
+  const after=data.qty_after, mid=data.movement_id;
+  await loadAll();
+  if(data.short){
+    toast(`記録しました（在庫 ${after} 点）。在庫0以下です。店長に確認を`, "warn", "取り消し", ()=>undoSale(mid));
+  }else{
+    toast(`${storeName(sid)}：「${p.name}」−${qty} → 残り ${after} 点`, null, "取り消し", ()=>undoSale(mid));
+  }
+  $("#sellJan").value=""; $("#sellTarget").innerHTML="";
+}
+async function undoSale(mid){
+  const {data,error}=await sb.rpc("inv_undo_sale",{p_movement_id:mid,p_actor:actor()});
+  if(error){ toast(errMsg(error),"err"); return; }
+  await loadAll(); toast("取り消しました（在庫 "+data.qty_after+" 点）","ok");
+}
+$("#sellJan").addEventListener("change",e=>onSellJan(e.target.value));
+$("#sellJan").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();onSellJan(e.target.value);} });
+
+/* ============================================================
+   入荷（店長）
+   ============================================================ */
+function recStoreId(){ return curStore("inv_rec_store", STORES[0]&&STORES[0].id); }
+function onRecJan(jan){
+  jan=(jan||"").trim(); $("#recJan").value=jan; const b=$("#recBadge"); const p=productByJan(jan);
+  if(!jan){ b.innerHTML=""; return; }
+  if(p){ b.className="jan-badge known"; b.innerHTML="✓ 登録済み商品：自動入力しました";
+    $("#recName").value=p.name||""; $("#recModel").value=p.model||""; $("#recNote").value=p.note||"";
+    $("#recShelf").value=shelfAt(p.id,recStoreId())||"";
+  }else{ b.className="jan-badge newp"; b.innerHTML="＋ 新規商品：商品名を入力してください"; $("#recName").focus(); }
+}
+$("#recJan").addEventListener("change",e=>onRecJan(e.target.value));
+$("#recJan").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();onRecJan(e.target.value);} });
+$("#recSubmit").addEventListener("click",async()=>{
+  if(!MPIN){ toast("店長ログインが必要です","err"); return; }
+  const jan=($("#recJan").value||"").trim(), name=($("#recName").value||"").trim(), qty=parseInt($("#recQty").value,10)||0;
+  if(!jan){ toast("JANコードを入力してください","err"); return; }
+  if(!name){ toast("商品名を入力してください","err"); $("#recName").focus(); return; }
+  if(qty<1){ toast("数量は1以上","err"); return; }
+  $("#recSubmit").disabled=true;
+  const {data,error}=await sb.rpc("inv_receive",{p_pin:MPIN,p_store:recStoreId(),p_jan:jan,p_name:name,
+    p_model:($("#recModel").value||"").trim(),p_note:($("#recNote").value||"").trim(),p_qty:qty,
+    p_shelf:($("#recShelf").value||"").trim(),p_actor:actor()});
+  $("#recSubmit").disabled=false;
+  if(error){ toast(errMsg(error),"err"); return; }
+  await loadAll();
+  toast(`${storeName(recStoreId())}に「${name}」+${qty} → ${data.qty_after} 点`,"ok");
+  $("#recJan").value="";$("#recName").value="";$("#recModel").value="";$("#recNote").value="";$("#recShelf").value="";$("#recQty").value="1";$("#recBadge").innerHTML="";
+});
+
+/* ============================================================
+   移動（店長）
+   ============================================================ */
+let movJan=null;
+function renderMoveSelects(){
+  ["#movFrom","#movTo","#clStore"].forEach((sel,i)=>{ const el=$(sel); if(!el)return; el.innerHTML="";
+    STORES.forEach(s=>{ const o=document.createElement("option"); o.value=s.id; o.textContent=s.name; el.appendChild(o); });
+    if(sel==="#movTo"&&STORES[1]) el.selectedIndex=1;
+  });
+  updateMovePreview();
+}
+function pickMove(jan){ jan=(jan||"").trim(); const p=productByJan(jan); const box=$("#movTarget");
+  if(!p){ box.innerHTML=`<div class="hint">「${esc(jan)}」は未登録です。</div>`; $("#movDetail").classList.add("hide"); movJan=null; return; }
+  movJan=jan;
+  box.innerHTML=`<div class="preview" style="margin-top:10px"><b>${esc(p.name)}</b><br>`+
+    STORES.map(s=>`${esc(s.name)}: <b>${qtyAt(p.id,s.id)}</b>点`).join(" ／ ")+`</div>`;
+  $("#movDetail").classList.remove("hide"); updateMovePreview();
+}
+function movSearchHandler(v){ v=(v||"").trim(); if(!v)return;
+  if(productByJan(v)){ pickMove(v); return; }
+  const q=v.toLowerCase(); const hit=PRODUCTS.find(p=>(p.name||"").toLowerCase().includes(q));
+  pickMove(hit?hit.jan:v);
+}
+function updateMovePreview(){ const el=$("#movPreview"); if(!el)return; if(!movJan){el.textContent="";return;}
+  const p=productByJan(movJan); if(!p){el.textContent="";return;}
+  const f=$("#movFrom").value,t=$("#movTo").value,q=parseInt($("#movQty").value,10)||0;
+  if(f===t){ el.innerHTML='<span style="color:var(--bad)">移動元と移動先が同じです</span>'; return; }
+  el.innerHTML=`移動後：<br>${esc(storeName(f))}: <b>${qtyAt(p.id,f)}</b>→<b>${qtyAt(p.id,f)-q}</b> 点<br>${esc(storeName(t))}: <b>${qtyAt(p.id,t)}</b>→<b>${qtyAt(p.id,t)+q}</b> 点`;
+}
+$("#movSearch").addEventListener("change",e=>movSearchHandler(e.target.value));
+$("#movSearch").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();movSearchHandler(e.target.value);} });
+["#movFrom","#movTo","#movQty"].forEach(s=>$(s).addEventListener("input",updateMovePreview));
+$("#movSubmit").addEventListener("click",async()=>{
+  if(!MPIN){ toast("店長ログインが必要です","err"); return; }
+  if(!movJan){ toast("商品を選んでください","err"); return; }
+  const f=$("#movFrom").value,t=$("#movTo").value,q=parseInt($("#movQty").value,10)||0;
+  if(f===t){ toast("移動元と移動先を別の店舗に","err"); return; }
+  if(q<1){ toast("数量は1以上","err"); return; }
+  $("#movSubmit").disabled=true;
+  const {error}=await sb.rpc("inv_transfer",{p_pin:MPIN,p_from:f,p_to:t,p_jan:movJan,p_qty:q,p_actor:actor()});
+  $("#movSubmit").disabled=false;
+  if(error){ toast(errMsg(error),"err"); return; }
+  const p=productByJan(movJan); await loadAll();
+  toast(`「${p.name}」を ${storeName(f)}→${storeName(t)} へ ${q}点 移動`,"ok");
+  pickMove(movJan);
+});
+
+/* ============================================================
+   締め（確定 / 判断A）
+   ============================================================ */
+async function renderClose(){
+  if(!$("#clDate").value) $("#clDate").value=jstToday();
+  const store=$("#clStore").value, date=$("#clDate").value;
+  if(!store){ return; }
+  $("#clList").innerHTML='<div class="hint">読み込み中…</div>'; $("#clFoot").innerHTML=""; $("#clStatus").innerHTML="";
+  try{
+    const [mv,dc]=await Promise.all([
+      sb.from("inv_movements").select("product_id,type,delta,undone").eq("store_id",store).eq("business_date",date),
+      sb.from("inv_daily_close").select("*").eq("store_id",store).eq("business_date",date).maybeSingle(),
+    ]);
+    if(mv.error) throw mv.error;
+    const sold={};
+    (mv.data||[]).forEach(r=>{ if(r.type==="out"&&!r.undone){ sold[r.product_id]=(sold[r.product_id]||0)+(-r.delta); } });
+    const ids=Object.keys(sold).filter(id=>sold[id]!==0);
+    const closed = dc.data;
+    if(closed){ $("#clStatus").innerHTML=`<div class="callout" style="margin-bottom:12px;background:#d9efe6;border-color:#b6e0cf;color:#0c4a37">✅ この日は確定済みです（売上 ${closed.sold_count} 点／確定者：${esc(closed.confirmed_by||'—')}）</div>`; }
+    if(!ids.length){ $("#clList").innerHTML=`<div class="empty" style="padding:1.5rem"><div class="big">🧾</div>この日の売上記録はありません。</div>`; }
+    else{
+      let total=0; let html="";
+      ids.sort((a,b)=>sold[b]-sold[a]);
+      ids.forEach(pid=>{ const p=PRODUCTS.find(x=>x.id===pid)||{name:"(不明)",jan:""}; total+=sold[pid];
+        html+=`<div class="rec-row"><div class="rec-name">${esc(p.name)}<small>JAN ${esc(p.jan)}</small></div>
+          <div class="rec-sold">−${sold[pid]}</div><div class="rec-now">残${qtyAt(pid,store)}</div>
+          <button class="btn rec-fix" data-jan="${esc(p.jan)}">数を修正</button></div>`; });
+      $("#clList").innerHTML=html;
+      $("#clStatus").insertAdjacentHTML("beforeend",`<div class="preview" style="margin-bottom:12px">本日の売上合計： <b>${total}</b> 点（${ids.length} 種類）</div>`);
+      $$("#clList .rec-fix").forEach(b=>b.onclick=()=>fixQty(b.dataset.jan, store));
+    }
+    $("#clFoot").innerHTML = closed
+      ? `<button class="btn danger wide" id="clReopen" style="margin-top:12px">確定を取り消す（再オープン）</button>`
+      : `<button class="btn ok big wide" id="clConfirm" style="margin-top:12px">✅ この日を確定する</button>`;
+    const cf=$("#clConfirm"), cr=$("#clReopen");
+    if(cf) cf.onclick=()=>closeDay(store,date);
+    if(cr) cr.onclick=()=>reopenDay(store,date);
+  }catch(e){ $("#clList").innerHTML=`<div class="hint">読み込み失敗：${esc(errMsg(e))}</div>`; }
+}
+async function fixQty(jan, store){
+  if(!MPIN){ toast("店長ログインが必要です","err"); return; }
+  const p=productByJan(jan); const cur=qtyAt(p.id,store);
+  const v=prompt(`「${p.name}」\n${storeName(store)}の正しい在庫数を入力してください（現在 ${cur}）`, String(Math.max(cur,0)));
+  if(v===null) return; const n=parseInt(v,10);
+  if(isNaN(n)||n<0){ toast("0以上の数を入力してください","err"); return; }
+  const {error}=await sb.rpc("inv_adjust",{p_pin:MPIN,p_store:store,p_jan:jan,p_new_qty:n,p_note:"締め時の修正",p_actor:actor()});
+  if(error){ toast(errMsg(error),"err"); return; }
+  await loadAll(); await renderClose(); toast("在庫を修正しました","ok");
+}
+async function closeDay(store,date){
+  if(!MPIN){ toast("店長ログインが必要です","err"); return; }
+  if(!confirm(storeName(store)+" の "+date+" を確定します。よろしいですか？")) return;
+  const {data,error}=await sb.rpc("inv_close_day",{p_pin:MPIN,p_store:store,p_date:date,p_confirmed_by:actor()});
+  if(error){ toast(errMsg(error),"err"); return; }
+  toast("確定しました（売上 "+data.sold_count+" 点）","ok"); await renderClose();
+}
+async function reopenDay(store,date){
+  if(!MPIN){ toast("店長ログインが必要です","err"); return; }
+  if(!confirm("この日の確定を取り消します。よろしいですか？")) return;
+  const {error}=await sb.rpc("inv_reopen_day",{p_pin:MPIN,p_store:store,p_date:date});
+  if(error){ toast(errMsg(error),"err"); return; }
+  toast("確定を取り消しました","ok"); await renderClose();
+}
+$("#clStore")&&$("#clStore").addEventListener("change",renderClose);
+$("#clDate")&&$("#clDate").addEventListener("change",renderClose);
+
+/* ============================================================
+   設定（店長）
+   ============================================================ */
+function renderSettings(){
+  const el=$("#setStores"); if(!el)return; el.innerHTML="";
+  STORES.forEach(s=>{ const row=document.createElement("div"); row.style.cssText="display:flex;gap:9px;align-items:center;margin-bottom:10px";
+    row.innerHTML=`<span style="width:11px;height:11px;border-radius:50%;background:${s.color};flex-shrink:0"></span>`;
+    const inp=document.createElement("input"); inp.type="text"; inp.value=s.name; inp.style.flex="1";
+    const btn=document.createElement("button"); btn.className="btn"; btn.textContent="変更"; btn.style.minHeight="44px";
+    btn.onclick=async()=>{ if(!MPIN){toast("店長ログインが必要","err");return;}
+      const {error}=await sb.rpc("inv_rename_store",{p_pin:MPIN,p_store:s.id,p_name:inp.value.trim()});
+      if(error){toast(errMsg(error),"err");return;} await loadAll(); toast("店舗名を変更しました","ok"); };
+    row.appendChild(inp); row.appendChild(btn); el.appendChild(row); });
+  $("#setActor").value=actor();
+}
+$("#setActor")&&$("#setActor").addEventListener("change",e=>{ setActor(e.target.value.trim()); toast("スタッフ名を保存しました","ok"); });
+$("#pinChangeBtn")&&$("#pinChangeBtn").addEventListener("click",async()=>{
+  const oldp=$("#pinOld").value, np=$("#pinNew").value;
+  if((np||"").length<4){ toast("新しいPINは4桁以上","err"); return; }
+  const {error}=await sb.rpc("inv_set_pin",{p_old_pin:oldp,p_new_pin:np});
+  if(error){ toast(errMsg(error),"err"); return; }
+  MPIN=np; $("#pinOld").value="";$("#pinNew").value=""; toast("PINを変更しました","ok");
+});
+
+/* ============================================================
+   店長ログイン
+   ============================================================ */
+let loginMode="login"; // login | setup
+async function openLogin(){
+  const {data,error}=await sb.rpc("inv_verify_pin",{p_pin:"__probe__"}).catch(()=>({data:null,error:null}));
+  // no_pin を判定するため verify を叩く（__probe__ は必ず不一致）
+  let noPin=false;
+  if(data&&data.no_pin) noPin=true;
+  loginMode = noPin ? "setup" : "login";
+  $("#loginTitle").textContent = noPin ? "店長PINの初期設定" : "店長ログイン";
+  $("#loginDesc").textContent = noPin ? "初回です。店長用のPIN（4桁以上）を決めてください。以後この番号で店長機能を使います。" : "店長用の暗証番号（PIN）を入力してください。";
+  $("#loginPin").value=""; $("#loginPin2").value="";
+  $("#loginPin2Wrap").classList.toggle("hide", !noPin);
+  $("#loginSubmit").textContent = noPin ? "PINを設定" : "ログイン";
+  $("#loginModal").classList.add("show"); setTimeout(()=>$("#loginPin").focus(),50);
+}
+$("#mgrLoginBtn").addEventListener("click",openLogin);
+$("#loginCancel").addEventListener("click",()=>$("#loginModal").classList.remove("show"));
+$("#loginSubmit").addEventListener("click",doLogin);
+$("#loginPin").addEventListener("keydown",e=>{ if(e.key==="Enter"&&loginMode==="login") doLogin(); });
+$("#loginPin2").addEventListener("keydown",e=>{ if(e.key==="Enter") doLogin(); });
+async function doLogin(){
+  const pin=$("#loginPin").value;
+  if((pin||"").length<4){ toast("PINは4桁以上","err"); return; }
+  if(loginMode==="setup"){
+    if(pin!==$("#loginPin2").value){ toast("確認用PINが一致しません","err"); return; }
+    const {error}=await sb.rpc("inv_set_pin",{p_old_pin:null,p_new_pin:pin});
+    if(error){ toast(errMsg(error),"err"); return; }
+    MPIN=pin; enterManager(); return;
+  }
+  const {data,error}=await sb.rpc("inv_verify_pin",{p_pin:pin});
+  if(error){ toast(errMsg(error),"err"); return; }        // ロック中など
+  if(!data.ok){ toast("PINが違います"+(data.remaining!=null?`（あと${data.remaining}回でロック）`:""),"err"); return; }
+  MPIN=pin; enterManager();
+}
+function enterManager(){
+  $("#loginModal").classList.remove("show");
+  $$(".mgr-only").forEach(t=>t.classList.remove("hide"));
+  $("#roleBadge").textContent="店長"; $("#roleBadge").className="role mgr";
+  $("#mgrLoginBtn").classList.add("hide"); $("#mgrLogoutBtn").classList.remove("hide");
+  toast("店長モードになりました","ok");
+}
+$("#mgrLogoutBtn").addEventListener("click",()=>{
+  MPIN=null; $$(".mgr-only").forEach(t=>t.classList.add("hide"));
+  $("#roleBadge").textContent="スタッフ"; $("#roleBadge").className="role";
+  $("#mgrLoginBtn").classList.remove("hide"); $("#mgrLogoutBtn").classList.add("hide");
+  switchTab("search"); toast("ログアウトしました");
+});
+
+/* ============================================================
+   タブ
+   ============================================================ */
+function switchTab(name){
+  $$(".tab").forEach(t=>t.classList.toggle("active",t.dataset.tab===name));
+  ["search","sell","receive","move","close","settings"].forEach(id=>{
+    const s=$("#tab-"+id); if(s) s.classList.toggle("hide", id!==name);
+  });
+  stopAllScanners();
+  if(name==="close") renderClose();
+}
+$$(".tab").forEach(t=>t.addEventListener("click",()=>{
+  if(t.classList.contains("mgr-only")&&!MPIN){ openLogin(); return; }
+  switchTab(t.dataset.tab);
+}));
+
+/* ============================================================
+   バーコードスキャナー
+   ============================================================ */
+let scanner=null;
+const FMT=(typeof Html5QrcodeSupportedFormats!=="undefined")?[
+  Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.QR_CODE]:undefined;
+function startScan(readerId,startBtn,stopBtn,onResult){
+  if(typeof Html5Qrcode==="undefined"){ toast("スキャナー読込に失敗。手入力をご利用ください","err"); return; }
+  stopAllScanners(); scanner=new Html5Qrcode(readerId,{formatsToSupport:FMT,verbose:false});
+  startBtn.classList.add("hide"); stopBtn.classList.remove("hide");
+  scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},
+    dec=>{ onResult(dec); if(navigator.vibrate)navigator.vibrate(80); stopScan(startBtn,stopBtn); }, ()=>{})
+  .catch(()=>{ toast("カメラを起動できませんでした。許可設定をご確認ください","err"); startBtn.classList.remove("hide"); stopBtn.classList.add("hide"); scanner=null; });
+}
+function stopScan(a,b){ if(a)a.classList.remove("hide"); if(b)b.classList.add("hide"); if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});} }
+function stopAllScanners(){ if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});}
+  [["#sellScan","#sellScanStop"],["#recScan","#recScanStop"],["#movScan","#movScanStop"]].forEach(([a,b])=>{ $(a)&&$(a).classList.remove("hide"); $(b)&&$(b).classList.add("hide"); }); }
+$("#sellScan").addEventListener("click",()=>startScan("reader",$("#sellScan"),$("#sellScanStop"),onSellJan));
+$("#sellScanStop").addEventListener("click",()=>stopScan($("#sellScan"),$("#sellScanStop")));
+$("#recScan").addEventListener("click",()=>startScan("reader2",$("#recScan"),$("#recScanStop"),onRecJan));
+$("#recScanStop").addEventListener("click",()=>stopScan($("#recScan"),$("#recScanStop")));
+$("#movScan").addEventListener("click",()=>startScan("reader3",$("#movScan"),$("#movScanStop"),v=>{ $("#movSearch").value=v; movSearchHandler(v); }));
+$("#movScanStop").addEventListener("click",()=>stopScan($("#movScan"),$("#movScanStop")));
+
+/* ============================================================
+   更新 / ポーリング
+   ============================================================ */
+$("#refreshBtn").addEventListener("click",async()=>{ await loadAll(); if(!$("#tab-close").classList.contains("hide")) renderClose(); toast("最新に更新しました"); });
+window.addEventListener("focus",()=>loadAll());
+function startPoll(){ clearInterval(pollTimer); pollTimer=setInterval(()=>{ if(document.visibilityState==="visible") loadAll(); },15000); }
+
+/* ============================================================
+   起動
+   ============================================================ */
+(async function init(){
+  const ok=await loadAll();
+  if(ok) startPoll();
+})();
+</script>
+</body>
+</html>
