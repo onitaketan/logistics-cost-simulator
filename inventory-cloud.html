@@ -645,10 +645,9 @@ $("#pinChangeBtn")&&$("#pinChangeBtn").addEventListener("click",async()=>{
    ============================================================ */
 let loginMode="login"; // login | setup
 async function openLogin(){
-  const {data,error}=await sb.rpc("inv_verify_pin",{p_pin:"__probe__"}).catch(()=>({data:null,error:null}));
-  // no_pin を判定するため verify を叩く（__probe__ は必ず不一致）
+  // PIN未設定かを副作用なしで判定（verifyだと失敗回数を消費しロックの原因になるためpin_is_setを使う）
   let noPin=false;
-  if(data&&data.no_pin) noPin=true;
+  try{ const {data,error}=await sb.rpc("inv_pin_is_set"); if(!error) noPin=(data===false); }catch(e){}
   loginMode = noPin ? "setup" : "login";
   $("#loginTitle").textContent = noPin ? "店長PINの初期設定" : "店長ログイン";
   $("#loginDesc").textContent = noPin ? "初回です。店長用のPIN（4桁以上）を決めてください。以後この番号で店長機能を使います。" : "店長用の暗証番号（PIN）を入力してください。";
