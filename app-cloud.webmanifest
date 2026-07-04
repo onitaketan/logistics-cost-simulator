@@ -1,10 +1,12 @@
 {
+  "id": "inv-cloud",
   "name": "2店舗 在庫管理（店長）",
   "short_name": "在庫管理",
   "description": "入荷・店舗間移動・日次の締め・在庫管理（店長用）",
   "start_url": "inventory-cloud.html",
   "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f4f5f5",
   "theme_color": "#15201d",
   "lang": "ja",
