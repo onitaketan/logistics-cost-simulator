@@ -114,6 +114,24 @@ input:focus{border-color:var(--akb)}
 
 .foot{text-align:center;font-size:12px;color:var(--ink3);margin-top:20px;line-height:1.7}
 
+/* 売上レポート */
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{flex:1;min-width:72px;font-family:inherit;font-size:14px;font-weight:600;padding:10px;min-height:44px;border:1.5px solid var(--line2);border-radius:20px;background:var(--soft);color:var(--ink2);cursor:pointer}
+.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.day{background:var(--card);border:1px solid var(--line);border-radius:var(--r);margin-bottom:12px;overflow:hidden}
+.day-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;padding:11px 14px;background:var(--soft);border-bottom:1px solid var(--line)}
+.day-date{font-weight:700;font-size:15px}
+.day-date small{font-weight:400;color:var(--ink3);font-size:12px;margin-left:6px}
+.day-total{font-family:var(--mono);font-weight:600;font-size:14px;color:var(--bad)}
+.drow{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);font-size:14px}
+.drow:last-child{border-bottom:none}
+.drow .dn{flex:1;line-height:1.3}
+.drow .dn small{display:block;color:var(--ink3);font-size:11px}
+.drow .dstore{font-size:11px;color:var(--ink2);background:var(--soft);border:1px solid var(--line);padding:2px 8px;border-radius:14px;white-space:nowrap}
+.drow .dq{font-family:var(--mono);font-weight:600;font-size:15px;color:var(--bad);min-width:44px;text-align:right}
+.rep-sum{font-size:13px;color:var(--ink2);margin-bottom:12px;padding:10px 12px;background:var(--soft);border-radius:var(--r-sm)}
+.rep-sum b{font-family:var(--mono);color:var(--ink)}
+
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:15px;padding:14px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:93vw;display:flex;align-items:center;gap:12px}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 .toast.err{background:var(--bad)}.toast.warn{background:var(--warn)}.toast.ok{background:var(--good)}
@@ -132,7 +150,8 @@ input:focus{border-color:var(--akb)}
 
   <div class="tabs">
     <div class="tab active" data-tab="sell">➖ 売れた</div>
-    <div class="tab" data-tab="find">🔍 在庫を調べる</div>
+    <div class="tab" data-tab="find">🔍 在庫</div>
+    <div class="tab" data-tab="report">📊 売上</div>
   </div>
 
   <!-- SELL -->
@@ -171,6 +190,20 @@ input:focus{border-color:var(--akb)}
     <div id="findResults"></div>
   </section>
 
+  <!-- REPORT (売上) -->
+  <section id="tab-report" class="hide">
+    <div class="panel">
+      <span class="label">📊 売上の記録 <span class="sub">何が・いつ・何個 売れたか</span></span>
+      <div class="seg" id="repPeriod">
+        <button data-d="0" class="on">今日</button>
+        <button data-d="6">7日間</button>
+        <button data-d="29">30日間</button>
+      </div>
+      <div class="seg" id="repStore" style="margin-top:8px"></div>
+    </div>
+    <div id="repResult"></div>
+  </section>
+
   <div class="foot">在庫データは店長のPCと共有されています。<br>入荷や修正は店長にお願いしてください。</div>
 </div>
 
@@ -185,6 +218,9 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
 const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let STORES=[],PRODUCTS=[],STOCK={},TOP=[],selJan=null,sellQty=1,pollTimer=null;
+let repDays=0,repStore="";  // 売上レポート: 期間(日数)・店舗フィルタ
+function jstToday(){ return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Tokyo"}); }
+function addDays(ds,n){ const d=new Date(ds+"T00:00:00Z"); d.setUTCDate(d.getUTCDate()+n); return d.toISOString().slice(0,10); }
 
 function actor(){ return localStorage.getItem("inv_actor")||""; }
 function storeName(id){const s=STORES.find(x=>x.id===id);return s?s.name:"?";}
@@ -215,8 +251,9 @@ async function loadAll(){
     STORES=st.data||[]; PRODUCTS=pr.data||[]; TOP=(tp&&!tp.error&&tp.data)?tp.data:[];
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{(STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf};});
-    setConn(true); renderStores(); renderTop(); renderPick(); renderFind();
+    setConn(true); renderStores(); renderTop(); renderPick(); renderFind(); renderRepStores();
     if(selJan) showProduct(selJan,true);
+    if(!$("#tab-report").classList.contains("hide")) loadReport();
     return true;
   }catch(e){ setConn(false); toast("読み込み失敗："+errMsg(e),"err"); return false; }
 }
@@ -321,12 +358,53 @@ function renderFind(){
 }
 $("#findInput").addEventListener("input",renderFind);
 
+/* 売上レポート */
+function renderRepStores(){
+  const el=$("#repStore"); if(!el) return; el.innerHTML="";
+  const mk=(id,label)=>{ const b=document.createElement("button"); b.textContent=label;
+    b.className=(repStore===id?"on":""); b.onclick=()=>{ repStore=id; renderRepStores(); loadReport(); }; el.appendChild(b); };
+  mk("","全店");
+  STORES.forEach(s=>mk(s.id,s.name));
+}
+$("#repPeriod").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b)return;
+  repDays=parseInt(b.dataset.d,10)||0;
+  $$("#repPeriod button").forEach(x=>x.classList.toggle("on",x===b)); loadReport(); });
+
+async function loadReport(){
+  const box=$("#repResult"); box.innerHTML=`<div class="empty">読み込み中…</div>`;
+  const to=jstToday(), from=addDays(to,-repDays);
+  const {data,error}=await sb.rpc("inv_sales_report",{p_from:from,p_to:to,p_store:repStore||null});
+  if(error){ box.innerHTML=`<div class="empty">読み込み失敗：${esc(errMsg(error))}</div>`; return; }
+  const rows=data||[];
+  if(!rows.length){ box.innerHTML=`<div class="empty"><div class="big">🧾</div>この期間の売上記録はありません。</div>`; return; }
+  // 日付ごとにまとめる
+  const byDate={}; let grand=0;
+  rows.forEach(r=>{ (byDate[r.business_date]=byDate[r.business_date]||[]).push(r); grand+=r.sold; });
+  const dates=Object.keys(byDate).sort().reverse();
+  const wd=["日","月","火","水","木","金","土"];
+  let html=`<div class="rep-sum">期間合計 <b>${grand}</b> 点（${dates.length} 日）${repStore?" ／ "+esc(storeName(repStore)):" ／ 全店"}</div>`;
+  dates.forEach(d=>{
+    const list=byDate[d]; const dtot=list.reduce((a,r)=>a+r.sold,0);
+    const dow=wd[new Date(d+"T00:00:00Z").getUTCDay()];
+    html+=`<div class="day"><div class="day-head"><span class="day-date">${esc(d)}<small>(${dow})</small></span><span class="day-total">計 ${dtot} 点</span></div>`;
+    list.forEach(r=>{
+      html+=`<div class="drow"><span class="dn">${esc(r.name)}${r.model?`<small>${esc(r.model)}</small>`:""}</span>`+
+        (repStore?"":`<span class="dstore">${esc(storeName(r.store_id))}</span>`)+
+        `<span class="dq">${r.sold}</span></div>`;
+    });
+    html+=`</div>`;
+  });
+  box.innerHTML=html;
+}
+
 /* タブ */
 $$(".tab").forEach(t=>t.addEventListener("click",()=>{
   $$(".tab").forEach(x=>x.classList.remove("active")); t.classList.add("active");
   $("#tab-sell").classList.toggle("hide",t.dataset.tab!=="sell");
   $("#tab-find").classList.toggle("hide",t.dataset.tab!=="find");
+  $("#tab-report").classList.toggle("hide",t.dataset.tab!=="report");
   stopScan();
+  if(t.dataset.tab==="report") loadReport();
 }));
 
 /* スキャナー */
