@@ -1,0 +1,20 @@
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# node / next
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# env & secrets
+.env
+.env.local
+
+# storage / local artifacts
+storage/
+*.log

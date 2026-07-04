@@ -1,0 +1,90 @@
+"""Auth primitives: password hashing, JWT, 2FA, and FastAPI dependencies.
+
+MVP uses self-issued JWT so the system is not blocked on an external IdP. The
+token issuance is isolated here so Auth0 / Azure AD / Supabase Auth can be
+swapped in later without touching routers.
+"""
+
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+import pyotp
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+from app.core.config import get_settings
+from app.core.rbac import Perm, has_permission
+
+_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_ALGO = "HS256"
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+class CurrentUser(BaseModel):
+    id: str
+    email: str
+    role: str
+
+
+def hash_password(raw: str) -> str:
+    return _pwd.hash(raw)
+
+
+def verify_password(raw: str, hashed: str) -> bool:
+    return _pwd.verify(raw, hashed)
+
+
+def verify_totp(secret: str | None, code: str | None) -> bool:
+    if not secret:
+        return True  # 2FA not enrolled for this user
+    if not code:
+        return False
+    return pyotp.TOTP(secret).verify(code, valid_window=1)
+
+
+def create_access_token(user_id: str, email: str, role: str) -> str:
+    settings = get_settings()
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "role": role,
+        "iat": now,
+        "exp": now + timedelta(minutes=settings.access_token_expire_minutes),
+    }
+    return jwt.encode(payload, settings.api_secret_key, algorithm=_ALGO)
+
+
+def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> CurrentUser:
+    creds_exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, get_settings().api_secret_key, algorithms=[_ALGO])
+    except JWTError:
+        raise creds_exc
+    if not payload.get("sub"):
+        raise creds_exc
+    return CurrentUser(id=payload["sub"], email=payload.get("email", ""), role=payload.get("role", "viewer"))
+
+
+CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+def require(perm: Perm):
+    """Dependency factory that enforces an RBAC permission."""
+
+    def _dep(user: CurrentUserDep) -> CurrentUser:
+        if not has_permission(user.role, perm):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"role '{user.role}' lacks permission '{perm}'",
+            )
+        return user
+
+    return _dep

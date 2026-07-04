@@ -1,0 +1,6 @@
+{
+  "name": "@rams/shared-types",
+  "version": "0.1.0",
+  "types": "index.ts",
+  "main": "index.ts"
+}
