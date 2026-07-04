@@ -1,17 +1,22 @@
 "use client";
 
 // Model detail (docs/02 §6). Tabs: Overview / Contract / Permissions / Assets.
-// The adult-verification action is here; it is backend-gated (a model cannot be
-// used for generation unless the backend confirms adult_verified).
+// Each tab lists existing records AND lets an authorized user create new ones, so
+// a model can be fully set up through the UI (register → contract → permission →
+// assets). Adult verification is here and is backend-gated. The UI carries no
+// compliance logic — the backend decides what is allowed.
 
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { MEDIA_SCOPE, REGION_SCOPE } from "@rams/shared-types";
 import type { Model } from "@rams/shared-types";
 import type { Asset, Contract, Permission } from "@/types";
 
 type Tab = "overview" | "contract" | "permissions" | "assets";
+
+const yn = (b: boolean | undefined) => (b ? "可" : "不可");
 
 export default function ModelDetailPage() {
   const params = useParams<{ id: string }>();
@@ -23,25 +28,39 @@ export default function ModelDetailPage() {
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadModel = useCallback(() => {
     api.getModel(id).then(setModel).catch((e) => setError((e as Error).message));
   }, [id]);
+  const loadContracts = useCallback(() => {
+    api.listContracts(id).then(setContracts).catch(() => setContracts([]));
+  }, [id]);
+  const loadPermissions = useCallback(() => {
+    api.listPermissions(id).then(setPermissions).catch(() => setPermissions([]));
+  }, [id]);
+  const loadAssets = useCallback(() => {
+    api.listAssets(id).then(setAssets).catch(() => setAssets([]));
+  }, [id]);
 
   useEffect(() => {
     loadModel();
-    api.listContracts(id).then(setContracts).catch(() => setContracts([]));
-    api.listPermissions(id).then(setPermissions).catch(() => setPermissions([]));
-    api.listAssets(id).then(setAssets).catch(() => setAssets([]));
-  }, [id, loadModel]);
+    loadContracts();
+    loadPermissions();
+    loadAssets();
+  }, [loadModel, loadContracts, loadPermissions, loadAssets]);
+
+  function flash(msg: string) {
+    setNotice(msg);
+    setError(null);
+  }
 
   async function toggleAdult(next: boolean) {
     setError(null);
     setBusy(true);
     try {
-      const updated = await api.setAdultVerification(id, next);
-      setModel(updated);
+      setModel(await api.setAdultVerification(id, next));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -76,6 +95,7 @@ export default function ModelDetailPage() {
         </div>
       </div>
       {error && <p className="error">{error}</p>}
+      {notice && <p style={{ color: "var(--ok)" }}>{notice}</p>}
 
       <div className="tabs">
         {(["overview", "contract", "permissions", "assets"] as Tab[]).map((t) => (
@@ -106,101 +126,329 @@ export default function ModelDetailPage() {
       )}
 
       {tab === "contract" && (
-        <div className="card">
-          <h3>契約</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>種別</th>
-                <th>開始</th>
-                <th>終了</th>
-                <th>AI生成</th>
-                <th>AI学習</th>
-                <th>海外</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contracts.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.contract_type ?? "—"}</td>
-                  <td>{c.contract_start ?? "—"}</td>
-                  <td>{c.contract_end ?? "—"}</td>
-                  <td>{c.ai_generation_allowed ? "可" : "不可"}</td>
-                  <td>{c.ai_training_allowed ? "可" : "不可"}</td>
-                  <td>{c.overseas_allowed ? "可" : "不可"}</td>
-                </tr>
-              ))}
-              {contracts.length === 0 && (
+        <>
+          <div className="card">
+            <h3>契約</h3>
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={6} className="muted">契約データがありません。</td>
+                  <th>契約番号</th><th>種別</th><th>開始</th><th>終了</th>
+                  <th>AI生成</th><th>AI学習</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {contracts.map((c) => (
+                  <tr key={c.id}>
+                    <td>{c.contract_number ?? "—"}</td>
+                    <td>{c.contract_type ?? "—"}</td>
+                    <td>{c.contract_start ?? "—"}</td>
+                    <td>{c.contract_end ?? "—"}</td>
+                    <td>{yn(c.ai_generation_allowed)}</td>
+                    <td>{yn(c.ai_training_allowed)}</td>
+                  </tr>
+                ))}
+                {contracts.length === 0 && (
+                  <tr><td colSpan={6} className="muted">契約データがありません。</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <ContractForm modelId={id} onDone={() => { loadContracts(); flash("契約を登録しました。"); }} onError={setError} />
+        </>
       )}
 
       {tab === "permissions" && (
-        <div className="card">
-          <h3>許諾範囲</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>項目</th>
-                <th>可否</th>
-                <th>承認レベル</th>
-                <th>備考</th>
-              </tr>
-            </thead>
-            <tbody>
-              {permissions.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.scope_type}</td>
-                  <td>{p.allowed}</td>
-                  <td>{p.approval_level ?? "—"}</td>
-                  <td>{p.notes ?? "—"}</td>
-                </tr>
-              ))}
-              {permissions.length === 0 && (
+        <>
+          <div className="card">
+            <h3>許諾範囲</h3>
+            <table>
+              <thead>
                 <tr>
-                  <td colSpan={4} className="muted">許諾データがありません。</td>
+                  <th>媒体</th><th>地域</th><th>水着</th><th>下着</th><th>入浴</th>
+                  <th>露出上限</th><th>承認</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {permissions.map((p) => (
+                  <tr key={p.id}>
+                    <td>{(p.media_scope ?? []).join(", ") || "—"}</td>
+                    <td>{(p.region_scope ?? []).join(", ") || "—"}</td>
+                    <td>{yn(p.swimwear_allowed)}</td>
+                    <td>{yn(p.underwear_allowed)}</td>
+                    <td>{p.bath_allowed}</td>
+                    <td>{p.exposure_level_max}</td>
+                    <td>{p.approval_required_level}</td>
+                  </tr>
+                ))}
+                {permissions.length === 0 && (
+                  <tr><td colSpan={7} className="muted">許諾データがありません。</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <PermissionForm
+            modelId={id}
+            contracts={contracts}
+            onDone={() => { loadPermissions(); flash("許諾範囲を登録しました。"); }}
+            onError={setError}
+          />
+        </>
       )}
 
       {tab === "assets" && (
-        <div className="card">
-          <h3>素材</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>種別</th>
-                <th>用途</th>
-                <th>同意</th>
-                <th>登録日</th>
-              </tr>
-            </thead>
-            <tbody>
-              {assets.map((a) => (
-                <tr key={a.id}>
-                  <td>{a.asset_type}</td>
-                  <td>{a.usage_type}</td>
-                  <td>{a.consent_confirmed ? "確認済" : "未確認"}</td>
-                  <td>{a.created_at ?? "—"}</td>
-                </tr>
-              ))}
-              {assets.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="muted">素材がありません。</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="card">
+            <h3>素材</h3>
+            <table>
+              <thead>
+                <tr><th>種別</th><th>用途</th><th>ファイル名</th><th>同意</th></tr>
+              </thead>
+              <tbody>
+                {assets.map((a) => (
+                  <tr key={a.id}>
+                    <td>{a.asset_type}</td>
+                    <td>{a.usage_type}</td>
+                    <td>{a.original_filename ?? "—"}</td>
+                    <td>{a.consent_confirmed ? "確認済" : "未確認"}</td>
+                  </tr>
+                ))}
+                {assets.length === 0 && (
+                  <tr><td colSpan={4} className="muted">素材がありません。</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <AssetForm modelId={id} onDone={() => { loadAssets(); flash("素材をアップロードしました。"); }} onError={setError} />
+        </>
       )}
+    </div>
+  );
+}
+
+// ---------------- Contract form ----------------
+function ContractForm({ modelId, onDone, onError }: {
+  modelId: string; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [number, setNumber] = useState("");
+  const [type, setType] = useState("base");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [gen, setGen] = useState(true);
+  const [train, setTrain] = useState(false);
+  const [postUse, setPostUse] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.createContract(modelId, {
+        contract_number: number,
+        contract_type: type,
+        contract_start: start,
+        contract_end: end,
+        ai_generation_allowed: gen,
+        ai_training_allowed: train,
+        post_contract_use_allowed: postUse,
+      });
+      onDone();
+      setNumber("");
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>契約を追加</h3>
+      <form onSubmit={submit}>
+        <label className="field"><span>契約番号 *</span>
+          <input value={number} onChange={(e) => setNumber(e.target.value)} required /></label>
+        <label className="field"><span>種別</span>
+          <select value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="base">base</option>
+            <option value="individual">individual</option>
+            <option value="additional_consent">additional_consent</option>
+          </select></label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <label className="field" style={{ flex: 1 }}><span>開始日 *</span>
+            <input type="date" value={start} onChange={(e) => setStart(e.target.value)} required /></label>
+          <label className="field" style={{ flex: 1 }}><span>終了日 *</span>
+            <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} required /></label>
+        </div>
+        <label style={{ display: "block", marginBottom: 6 }}>
+          <input type="checkbox" checked={gen} onChange={(e) => setGen(e.target.checked)} /> AI生成を許可
+        </label>
+        <label style={{ display: "block", marginBottom: 6 }}>
+          <input type="checkbox" checked={train} onChange={(e) => setTrain(e.target.checked)} /> AI学習を許可
+        </label>
+        <label style={{ display: "block", marginBottom: 10 }}>
+          <input type="checkbox" checked={postUse} onChange={(e) => setPostUse(e.target.checked)} /> 契約終了後の利用を許可
+        </label>
+        <button type="submit" disabled={busy || !number || !start || !end}>
+          {busy ? "登録中…" : "契約を登録"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ---------------- Permission form ----------------
+function PermissionForm({ modelId, contracts, onDone, onError }: {
+  modelId: string; contracts: Contract[]; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [contractId, setContractId] = useState("");
+  const [media, setMedia] = useState<string[]>([]);
+  const [region, setRegion] = useState<string[]>([]);
+  const [products, setProducts] = useState("");
+  const [swim, setSwim] = useState(false);
+  const [under, setUnder] = useState(false);
+  const [bath, setBath] = useState("no");
+  const [expMax, setExpMax] = useState(0);
+  const [overseas, setOverseas] = useState(false);
+  const [approval, setApproval] = useState("legal");
+  const [busy, setBusy] = useState(false);
+
+  function toggle(list: string[], set: (v: string[]) => void, v: string) {
+    set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.createPermission(modelId, {
+        contract_id: contractId,
+        media_scope: media,
+        region_scope: region,
+        product_scope: products.split(",").map((s) => s.trim()).filter(Boolean),
+        swimwear_allowed: swim,
+        underwear_allowed: under,
+        bath_allowed: bath,
+        exposure_level_max: expMax,
+        overseas_allowed: overseas,
+        approval_required_level: approval,
+      });
+      onDone();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>許諾範囲を追加</h3>
+      {contracts.length === 0 ? (
+        <p className="muted">先に契約を登録してください（許諾は契約に紐づきます）。</p>
+      ) : (
+        <form onSubmit={submit}>
+          <label className="field"><span>紐づく契約 *</span>
+            <select value={contractId} onChange={(e) => setContractId(e.target.value)} required>
+              <option value="">選択してください</option>
+              {contracts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.contract_number ?? c.id}（〜{c.contract_end ?? "?"}）
+                </option>
+              ))}
+            </select></label>
+          <div className="field"><span>媒体</span>
+            <div>{MEDIA_SCOPE.map((m) => (
+              <label key={m} style={{ marginRight: 12 }}>
+                <input type="checkbox" checked={media.includes(m)} onChange={() => toggle(media, setMedia, m)} /> {m}
+              </label>
+            ))}</div>
+          </div>
+          <div className="field"><span>地域</span>
+            <div>{REGION_SCOPE.map((r) => (
+              <label key={r} style={{ marginRight: 12 }}>
+                <input type="checkbox" checked={region.includes(r)} onChange={() => toggle(region, setRegion, r)} /> {r}
+              </label>
+            ))}</div>
+          </div>
+          <label className="field"><span>許可商品カテゴリ（カンマ区切り）</span>
+            <input value={products} onChange={(e) => setProducts(e.target.value)} placeholder="beverage, apparel" /></label>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <label><input type="checkbox" checked={swim} onChange={(e) => setSwim(e.target.checked)} /> 水着許可</label>
+            <label><input type="checkbox" checked={under} onChange={(e) => setUnder(e.target.checked)} /> 下着許可</label>
+            <label><input type="checkbox" checked={overseas} onChange={(e) => setOverseas(e.target.checked)} /> 海外配信許可</label>
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <label className="field" style={{ flex: 1 }}><span>入浴</span>
+              <select value={bath} onChange={(e) => setBath(e.target.value)}>
+                <option value="no">no</option><option value="conditional">conditional</option><option value="yes">yes</option>
+              </select></label>
+            <label className="field" style={{ flex: 1 }}><span>露出上限(0-4)</span>
+              <select value={expMax} onChange={(e) => setExpMax(Number(e.target.value))}>
+                {[0, 1, 2, 3, 4].map((v) => <option key={v} value={v}>{v}</option>)}
+              </select></label>
+            <label className="field" style={{ flex: 1 }}><span>基本承認</span>
+              <select value={approval} onChange={(e) => setApproval(e.target.value)}>
+                <option value="internal">internal</option><option value="legal">legal</option>
+                <option value="agency">agency</option><option value="person">person</option>
+              </select></label>
+          </div>
+          <button type="submit" disabled={busy || !contractId}>
+            {busy ? "登録中…" : "許諾を登録"}
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
+// ---------------- Asset upload ----------------
+function AssetForm({ modelId, onDone, onError }: {
+  modelId: string; onDone: () => void; onError: (m: string) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [assetType, setAssetType] = useState("reference");
+  const [usageType, setUsageType] = useState("reference");
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!file) return;
+    setBusy(true);
+    try {
+      await api.uploadAsset(modelId, file, assetType, usageType, consent);
+      onDone();
+      setFile(null);
+      setConsent(false);
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>素材をアップロード</h3>
+      <form onSubmit={submit}>
+        <label className="field"><span>ファイル *</span>
+          <input type="file" onChange={(e) => setFile(e.target.files?.[0] ?? null)} required /></label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <label className="field" style={{ flex: 1 }}><span>種別</span>
+            <select value={assetType} onChange={(e) => setAssetType(e.target.value)}>
+              {["face", "body", "expression", "pose", "reference", "ng"].map((v) => <option key={v} value={v}>{v}</option>)}
+            </select></label>
+          <label className="field" style={{ flex: 1 }}><span>用途</span>
+            <select value={usageType} onChange={(e) => setUsageType(e.target.value)}>
+              {["reference", "training", "review_only", "prohibited"].map((v) => <option key={v} value={v}>{v}</option>)}
+            </select></label>
+        </div>
+        <label style={{ display: "block", marginBottom: 10 }}>
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> 本人・事務所の同意を確認済み（学習利用には必須）
+        </label>
+        <button type="submit" disabled={busy || !file}>
+          {busy ? "アップロード中…" : "アップロード"}
+        </button>
+      </form>
     </div>
   );
 }

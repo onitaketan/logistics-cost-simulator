@@ -10,38 +10,41 @@ import type {
   RiskLevel,
 } from "@rams/shared-types";
 
-// POST /models/{id}/contracts ; GET /models/{id}/contracts
+// GET /models/{id}/contracts (list) — mirrors the enriched backend response
 export interface Contract {
   id: string;
-  model_id: string;
+  contract_number?: string;
   contract_type: string | null;
   contract_start: string | null;
   contract_end: string | null;
   ai_generation_allowed: boolean;
   ai_training_allowed: boolean;
-  overseas_allowed: boolean;
-  notes: string | null;
+  post_contract_use_allowed?: boolean;
 }
 
-// GET /models/{id}/permissions
+// GET /models/{id}/permissions (list) — mirrors the enriched backend response
 export interface Permission {
   id: string;
-  model_id: string;
-  scope_type: string; // e.g. "swimwear" | "underwear" | "bath" | "body_edit" ...
-  allowed: string; // "yes" | "no" | "conditional"
-  approval_level: ApprovalLevel | null;
-  notes: string | null;
+  contract_id: string;
+  media_scope: string[];
+  region_scope: string[];
+  product_scope?: string[];
+  prohibited_product_scope?: string[];
+  swimwear_allowed: boolean;
+  underwear_allowed: boolean;
+  bath_allowed: string; // yes | no | conditional
+  exposure_level_max: number;
+  overseas_allowed?: boolean;
+  approval_required_level: ApprovalLevel | string;
 }
 
-// GET /models/{id}/assets
+// GET /models/{id}/assets — mirrors backend list_assets response
 export interface Asset {
   id: string;
-  model_id: string;
   asset_type: string;
   usage_type: string;
-  file_path: string | null;
+  original_filename: string | null;
   consent_confirmed: boolean;
-  created_at: string | null;
 }
 
 // GET /generations/{id}

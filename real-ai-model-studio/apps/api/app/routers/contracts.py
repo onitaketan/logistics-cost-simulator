@@ -40,8 +40,13 @@ def list_contracts(
 ):
     rows = db.scalars(select(ModelContract).where(ModelContract.model_id == model_id)).all()
     return ok([{"id": str(c.id), "contract_number": c.contract_number,
+                "contract_type": c.contract_type,
+                "contract_start": str(c.contract_start),
                 "contract_end": str(c.contract_end),
-                "ai_generation_allowed": c.ai_generation_allowed} for c in rows])
+                "ai_generation_allowed": c.ai_generation_allowed,
+                "ai_training_allowed": c.ai_training_allowed,
+                "post_contract_use_allowed": c.post_contract_use_allowed}
+               for c in rows])
 
 
 @router.post("/models/{model_id}/permissions")
@@ -71,6 +76,10 @@ def list_permissions(
     rows = db.scalars(select(ModelPermission).where(ModelPermission.model_id == model_id)).all()
     return ok([{"id": str(p.id), "contract_id": str(p.contract_id),
                 "media_scope": p.media_scope, "region_scope": p.region_scope,
+                "product_scope": p.product_scope,
+                "prohibited_product_scope": p.prohibited_product_scope,
                 "swimwear_allowed": p.swimwear_allowed, "underwear_allowed": p.underwear_allowed,
-                "bath_allowed": p.bath_allowed, "exposure_level_max": p.exposure_level_max}
+                "bath_allowed": p.bath_allowed, "exposure_level_max": p.exposure_level_max,
+                "overseas_allowed": p.overseas_allowed,
+                "approval_required_level": p.approval_required_level}
                for p in rows])
