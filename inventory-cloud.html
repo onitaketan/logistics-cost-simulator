@@ -162,6 +162,13 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
 .pick .pn small{display:block;color:var(--ink3);font-size:11px;font-family:var(--mono);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pick .pq{font-family:var(--mono);font-weight:600;font-size:15px;white-space:nowrap}
 .pick .pq.zero{color:var(--ink3);font-weight:400}.pick .pq.neg{color:var(--bad)}
+.sellchips{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.sellchip{position:relative;border:1.5px solid var(--line2);background:var(--card);border-radius:12px;padding:10px 12px 10px 32px;cursor:pointer;text-align:left;min-height:54px;transition:background .12s,transform .06s}
+.sellchip:hover,.sellchip:active{background:var(--soft)}.sellchip:active{transform:translateY(1px)}
+.sellchip .rk{position:absolute;left:8px;top:11px;width:19px;height:19px;border-radius:50%;background:#c2410c;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:var(--mono)}
+.sellchip .cn{font-weight:600;font-size:13.5px;line-height:1.25;display:block}
+.sellchip .cq{font-size:11.5px;color:var(--ink3);font-family:var(--mono)}
+@media(max-width:520px){.sellchips{grid-template-columns:1fr}}
 .btn,.tab,.store-pill{transition:transform .06s ease,background .15s,border-color .15s,color .15s}
 .btn:active,.tab:active,.store-pill:active{transform:translateY(1px)}
 .panel{transition:border-color .15s,box-shadow .15s}
@@ -248,7 +255,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
       <div id="sellTarget"></div>
     </div>
     <div class="panel">
-      <div class="p-title">③ または一覧から選ぶ</div>
+      <div class="p-title">③ よく売れる商品／一覧から選ぶ</div>
+      <div class="sellchips hide" id="sellTop"></div>
       <div class="searchbar"><span class="mag">🔍</span><input type="search" id="sellPick" placeholder="タイトル・機種名で絞り込み…" autocomplete="off"></div>
       <div class="picklist" id="sellPickList"></div>
     </div>
@@ -383,7 +391,7 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;"
 function jstToday(){ return new Date().toLocaleDateString("en-CA",{timeZone:"Asia/Tokyo"}); } // YYYY-MM-DD
 
 /* ---- state ---- */
-let STORES=[], PRODUCTS=[], STOCK={};   // STOCK[storeId][productId]={qty,shelf}
+let STORES=[], PRODUCTS=[], STOCK={}, TOP=[];   // STOCK[storeId][productId]={qty,shelf}; TOP=売れ筋
 let MPIN=null;                          // 店長PIN（メモリのみ）
 let pollTimer=null;
 
@@ -415,17 +423,18 @@ function productByJan(j){ return PRODUCTS.find(p=>p.jan===j); }
    ============================================================ */
 async function loadAll(){
   try{
-    const [st,pr,sk]=await Promise.all([
+    const [st,pr,sk,tp]=await Promise.all([
       sb.from("inv_stores").select("*").order("sort"),
       sb.from("inv_products").select("*"),
       sb.from("inv_stock").select("store_id,product_id,qty,shelf"),
+      sb.rpc("inv_top_sellers",{p_days:30,p_limit:8}),
     ]);
     if(st.error) throw st.error; if(pr.error) throw pr.error; if(sk.error) throw sk.error;
-    STORES=st.data||[]; PRODUCTS=pr.data||[];
+    STORES=st.data||[]; PRODUCTS=pr.data||[]; TOP=(tp&&!tp.error&&tp.data)?tp.data:[];
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{ (STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf}; });
     setConn(true);
-    renderHero(); renderSearch(); renderStorePills(); renderSellPick();
+    renderHero(); renderSearch(); renderStorePills(); renderSellTop(); renderSellPick();
     // 移動/設定タブは編集中の入力を消さないよう、非表示のときだけ再描画（表示中はタブ切替時に描画）
     if($("#tab-move").classList.contains("hide")) renderMoveSelects();
     if($("#tab-settings").classList.contains("hide")) renderSettings();
@@ -485,7 +494,7 @@ function renderStorePills(){
     if(!STORES.find(s=>s.id===cur)){ cur=STORES[0]&&STORES[0].id; }
     STORES.forEach(s=>{ const b=document.createElement("button");
       b.className="store-pill"+(s.id===cur?" on":""); b.textContent=s.name;
-      b.onclick=()=>{ localStorage.setItem(key,s.id); renderStorePills(); if(sel==='#sellStore'){ refreshSellTarget(); renderSellPick(); } };
+      b.onclick=()=>{ localStorage.setItem(key,s.id); renderStorePills(); if(sel==='#sellStore'){ refreshSellTarget(); renderSellTop(); renderSellPick(); } };
       el.appendChild(b); });
   });
 }
@@ -525,6 +534,18 @@ function renderSellPick(){
   });
 }
 $("#sellPick")&&$("#sellPick").addEventListener("input",renderSellPick);
+/* よく売れる商品（売れ筋トップ）をワンタップ選択 */
+function renderSellTop(){
+  const el=$("#sellTop"); if(!el) return; const sid=sellStoreId();
+  if(!TOP.length){ el.innerHTML=""; el.classList.add("hide"); return; }
+  el.classList.remove("hide"); el.innerHTML="";
+  TOP.forEach((t,i)=>{ const qy=qtyAt(t.product_id,sid);
+    const d=document.createElement("div"); d.className="sellchip";
+    d.innerHTML=`<span class="rk">${i+1}</span><span class="cn">${esc(t.name)}</span><span class="cq">在庫${qy}${t.model?' ／ '+esc(t.model):''}</span>`;
+    d.onclick=()=>{ $("#sellJan").value=t.jan; onSellJan(t.jan); const x=$("#sellTarget"); if(x) x.scrollIntoView({behavior:"smooth",block:"center"}); };
+    el.appendChild(d);
+  });
+}
 async function doSell(p){
   const sid=sellStoreId(); const qty=parseInt(($("#sellQty")||{}).value,10)||1;
   if(qty<1){ toast("数量は1以上","err"); return; }
