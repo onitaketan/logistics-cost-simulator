@@ -153,6 +153,15 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
 
 /* ===== 質感アップ ===== */
 .callout.ok-day{background:#d9efe6;border-color:#b6e0cf;color:#0c4a37}
+/* 売れた:一覧から選ぶ */
+.picklist{max-height:46vh;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
+.pick{display:flex;align-items:center;gap:10px;padding:12px 13px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--card);transition:background .12s}
+.pick:last-child{border-bottom:none}
+.pick:hover,.pick:active{background:var(--soft)}
+.pick .pn{flex:1;font-weight:500;font-size:15px;line-height:1.3;min-width:0}
+.pick .pn small{display:block;color:var(--ink3);font-size:11px;font-family:var(--mono);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pick .pq{font-family:var(--mono);font-weight:600;font-size:15px;white-space:nowrap}
+.pick .pq.zero{color:var(--ink3);font-weight:400}.pick .pq.neg{color:var(--bad)}
 .btn,.tab,.store-pill{transition:transform .06s ease,background .15s,border-color .15s,color .15s}
 .btn:active,.tab:active,.store-pill:active{transform:translateY(1px)}
 .panel{transition:border-color .15s,box-shadow .15s}
@@ -237,6 +246,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
       <div class="ig"><label class="il">JANコード（手入力も可）</label>
         <input type="text" class="jan" id="sellJan" inputmode="numeric" placeholder="例：4902370536942"></div>
       <div id="sellTarget"></div>
+    </div>
+    <div class="panel">
+      <div class="p-title">③ または一覧から選ぶ</div>
+      <div class="searchbar"><span class="mag">🔍</span><input type="search" id="sellPick" placeholder="タイトル・機種名で絞り込み…" autocomplete="off"></div>
+      <div class="picklist" id="sellPickList"></div>
     </div>
   </section>
 
@@ -411,7 +425,7 @@ async function loadAll(){
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{ (STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf}; });
     setConn(true);
-    renderHero(); renderSearch(); renderStorePills();
+    renderHero(); renderSearch(); renderStorePills(); renderSellPick();
     // 移動/設定タブは編集中の入力を消さないよう、非表示のときだけ再描画（表示中はタブ切替時に描画）
     if($("#tab-move").classList.contains("hide")) renderMoveSelects();
     if($("#tab-settings").classList.contains("hide")) renderSettings();
@@ -471,7 +485,7 @@ function renderStorePills(){
     if(!STORES.find(s=>s.id===cur)){ cur=STORES[0]&&STORES[0].id; }
     STORES.forEach(s=>{ const b=document.createElement("button");
       b.className="store-pill"+(s.id===cur?" on":""); b.textContent=s.name;
-      b.onclick=()=>{ localStorage.setItem(key,s.id); renderStorePills(); if(sel==='#sellStore') refreshSellTarget(); };
+      b.onclick=()=>{ localStorage.setItem(key,s.id); renderStorePills(); if(sel==='#sellStore'){ refreshSellTarget(); renderSellPick(); } };
       el.appendChild(b); });
   });
 }
@@ -493,6 +507,24 @@ function onSellJan(jan){
     <button class="btn sell big wide" id="sellDo">➖ ${esc(storeName(sid))}で「売れた」（在庫を減らす）</button>`;
   $("#sellDo").onclick=()=>doSell(p);
 }
+/* 一覧から選ぶ（タップで選択→上の売上パネルに反映） */
+function renderSellPick(){
+  const el=$("#sellPickList"); if(!el) return;
+  const q=($("#sellPick").value||"").trim().toLowerCase(); const sid=sellStoreId();
+  let list=PRODUCTS.slice();
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  list.sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
+  if(!list.length){ el.innerHTML=`<div class="empty" style="padding:1.4rem"><div class="big">📦</div>${q?"見つかりません":"商品がありません（「入荷」から登録してください）"}</div>`; return; }
+  el.innerHTML="";
+  list.slice(0,300).forEach(p=>{ const qy=qtyAt(p.id,sid);
+    const d=document.createElement("div"); d.className="pick";
+    d.innerHTML=`<span class="pn">${esc(p.name)}<small>${p.model?esc(p.model)+" ／ ":""}${esc(p.jan)}</small></span>
+      <span class="pq ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy}点</span>`;
+    d.onclick=()=>{ $("#sellJan").value=p.jan; onSellJan(p.jan); const t=$("#sellTarget"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); };
+    el.appendChild(d);
+  });
+}
+$("#sellPick")&&$("#sellPick").addEventListener("input",renderSellPick);
 async function doSell(p){
   const sid=sellStoreId(); const qty=parseInt(($("#sellQty")||{}).value,10)||1;
   if(qty<1){ toast("数量は1以上","err"); return; }
