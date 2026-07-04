@@ -8,19 +8,23 @@ swapped in later without touching routers.
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import bcrypt
 import pyotp
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from pydantic import BaseModel
 
 from app.core.config import get_settings
 from app.core.rbac import Perm, has_permission
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 _ALGO = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+
+
+def _b(raw: str) -> bytes:
+    # bcrypt hard-limits input to 72 bytes; truncate deterministically.
+    return raw.encode("utf-8")[:72]
 
 
 class CurrentUser(BaseModel):
@@ -30,11 +34,14 @@ class CurrentUser(BaseModel):
 
 
 def hash_password(raw: str) -> str:
-    return _pwd.hash(raw)
+    return bcrypt.hashpw(_b(raw), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(raw: str, hashed: str) -> bool:
-    return _pwd.verify(raw, hashed)
+    try:
+        return bcrypt.checkpw(_b(raw), hashed.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def verify_totp(secret: str | None, code: str | None) -> bool:

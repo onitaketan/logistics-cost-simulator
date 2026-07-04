@@ -38,11 +38,9 @@ async def create_generation(
             id=str(check.id), project_id=str(check.project_id),
             model_id=str(check.model_id), check_status=check.check_status,
         )
-    try:
-        gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
-    except gen.GenerationBlocked as e:
-        # 422: request is well-formed but forbidden by compliance state
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(e))
+    # Raises GenerationBlocked if the check is missing / mismatched / not ok|conditional.
+    # Propagates to the app-level handler which returns the consistent 422 envelope.
+    gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
 
     engine = None
     if body.ai_engine_id:

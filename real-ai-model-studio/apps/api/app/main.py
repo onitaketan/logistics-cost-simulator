@@ -17,6 +17,7 @@ from app.routers import (
     compliance,
     contracts,
     deliveries,
+    files,
     generations,
     models,
     outputs,
@@ -44,6 +45,7 @@ for r in (
     generations.router,
     outputs.router,
     deliveries.router,
+    files.router,
     audit.router,
 ):
     app.include_router(r, prefix=API_PREFIX)

@@ -54,10 +54,24 @@ pytest                                              # 判定エンジン・承�
 - [x] 資産アップロード（file_hash / consent 検証）P0-009
 - [x] 承認完了ゲート（必要承認が全て揃うまで approved にしない）+ 納品ロック
 - [x] 初期データ投入 scripts/seed.py（admin / mock engine / scope 辞書）
+- [x] Storage: local backend 実装（実書き込み・SHA-256・HMAC署名URL・traversal防御）+ `/files` 署名アクセス
+- [x] **統合テスト（実Postgres）**: 生成が API層とDB層の両方でブロックされることを実証
 - [x] Next.js フロント骨格 + APIクライアント + 共有型
-- [ ] Storage 実装（S3/R2 SSE）・署名URLの本結線（現在はプレースホルダ）
+- [ ] Storage: S3/R2（SSE-KMS）バックエンドの結線（interfaceは用意済み・boto3差込）
 - [ ] 生成の非同期化（Celery/Redis ワーカーへ移譲）
 - [ ] 本人/事務所 承認ポータル（P2）
+
+## Testing
+
+```bash
+cd apps/api
+pytest tests/test_compliance_engine.py tests/test_approval_service.py tests/test_storage_service.py  # DB不要（30件）
+# 統合テスト（実Postgres必須。schema適用+seed済みのDBを指す DATABASE_URL を渡す）:
+DATABASE_URL=postgresql+psycopg://... pytest tests/test_integration_flow.py                          # 3件（DBなしなら自動skip）
+```
+
+> ドライバ注意: 本番は `psycopg` (v3) を想定。CI/ローカルで v3 のC拡張が壊れている場合は
+> `postgresql+psycopg2://...` でも動作します（ORMはドライバ非依存）。
 
 > 本スキャフォールドは Phase 1 の「土台」。判定・ロック・監査の**設計と骨格**を固めることを目的とし、
 > 一部 router は永続化を TODO として残しています。運用前に弁護士・専門家確認が必須（README原本の注意参照）。
