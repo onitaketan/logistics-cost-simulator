@@ -38,8 +38,9 @@ cd apps/api
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
 psql "$DATABASE_URL" -f migrations/0001_init.sql   # スキーマ適用
+python scripts/seed.py                              # 初期admin/mockエンジン/scope辞書を投入
 uvicorn app.main:app --reload                       # http://localhost:8000/docs
-pytest                                              # 判定エンジンの単体テスト
+pytest                                              # 判定エンジン・承認ゲートの単体テスト（24件）
 ```
 
 ## 実装ステータス（Phase 1 Foundation）
@@ -49,11 +50,14 @@ pytest                                              # 判定エンジンの単�
 - [x] Compliance engine（doc 05 のルール実装 + 単体テスト）
 - [x] Generation service（判定ロック）/ AI adapter（base + mock）
 - [x] Audit / Storage service
-- [x] 全MVPエンドポイントの router 雛形
+- [x] 全MVPエンドポイントの router 雛形（26 endpoints, SQLAlchemy 永続化結線済み）
+- [x] 資産アップロード（file_hash / consent 検証）P0-009
+- [x] 承認完了ゲート（必要承認が全て揃うまで approved にしない）+ 納品ロック
+- [x] 初期データ投入 scripts/seed.py（admin / mock engine / scope 辞書）
 - [x] Next.js フロント骨格 + APIクライアント + 共有型
-- [ ] 実DB接続の結線・永続化（次スプライト）
-- [ ] 承認ステートマシンの本実装 / 納品ロック
-- [ ] Storage 実装（S3/R2）・署名URL
+- [ ] Storage 実装（S3/R2 SSE）・署名URLの本結線（現在はプレースホルダ）
+- [ ] 生成の非同期化（Celery/Redis ワーカーへ移譲）
+- [ ] 本人/事務所 承認ポータル（P2）
 
 > 本スキャフォールドは Phase 1 の「土台」。判定・ロック・監査の**設計と骨格**を固めることを目的とし、
 > 一部 router は永続化を TODO として残しています。運用前に弁護士・専門家確認が必須（README原本の注意参照）。

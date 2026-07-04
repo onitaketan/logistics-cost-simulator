@@ -6,15 +6,25 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.rbac import Perm
+from app.core.rbac import Perm, has_permission
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
-from app.models.generation import GenerationOutput
+from app.models.generation import ComplianceCheck, Generation, GenerationOutput
 from app.models.workflow import Approval, OutputReview
 from app.schemas.common import ok
 from app.schemas.dto import ApprovalCreate, OutputStatusUpdate, ReviewCreate, ReviseRequest
 from app.services import audit_service
+from app.services.approval_service import ApprovalRecord, evaluate_approvals
 from app.services.storage_service import signed_url
+
+# which RBAC permission each approval level demands
+_LEVEL_PERM = {
+    "internal": Perm.APPROVE_INTERNAL,
+    "legal": Perm.APPROVE_LEGAL,
+    "agency": Perm.APPROVE_LEGAL,   # agency/person sign-off recorded by legal in MVP (no external portal yet)
+    "person": Perm.APPROVE_LEGAL,
+    "admin": Perm.APPROVE_ADMIN,
+}
 
 router = APIRouter(prefix="/outputs", tags=["outputs"])
 
@@ -81,19 +91,44 @@ def add_approval(
     output_id: str,
     body: ApprovalCreate,
     db: Annotated[Session, Depends(get_db)],
-    # legal-level approvals need the legal permission; internal is broader.
-    user: Annotated[CurrentUserDep, Depends(require(Perm.APPROVE_INTERNAL))],
+    user: CurrentUserDep,
 ):
+    # Per-level authorization: legal-level approvals require the legal permission, etc.
+    needed = _LEVEL_PERM.get(body.approval_level, Perm.APPROVE_INTERNAL)
+    if not has_permission(user.role, needed):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            f"'{body.approval_level}' 承認の権限がありません。")
+
     o = _get_output(db, output_id)
     a = Approval(output_id=output_id, approver_id=user.id, **body.model_dump())
     db.add(a)
-    if body.approval_status == "approved":
-        o.output_status = "approved"
     db.flush()
+
+    # Resolve the approval levels required by this output's compliance check.
+    generation = db.get(Generation, o.generation_id)
+    check = db.get(ComplianceCheck, generation.compliance_check_id) if generation else None
+    required = list(check.required_approvals or []) if check else []
+
+    records = [
+        ApprovalRecord(level=r.approval_level, status=r.approval_status)
+        for r in db.scalars(select(Approval).where(Approval.output_id == output_id)).all()
+    ]
+    fully_approved, missing = evaluate_approvals(required, records)
+
+    if any(r.status in ("rejected", "revoked") for r in records):
+        o.output_status = "rejected"
+    elif fully_approved:
+        o.output_status = "approved"
+    # else: stays candidate/selected — not yet fully approved
+    db.flush()
+
     audit_service.record(db, user_id=user.id, action_type="approve", target_type="output",
-                         target_id=output_id, after={"level": body.approval_level, "status": body.approval_status})
+                         target_id=output_id,
+                         after={"level": body.approval_level, "status": body.approval_status,
+                                "fully_approved": fully_approved, "missing": missing})
     db.commit()
-    return ok({"id": str(a.id), "output_status": o.output_status})
+    return ok({"id": str(a.id), "output_status": o.output_status,
+               "required_approvals": required, "missing_approvals": missing})
 
 
 @router.get("/{output_id}/download")

@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 import app.models  # noqa: F401  (register ORM tables)
 from app.core.config import get_settings
 from app.routers import (
+    assets,
     audit,
     auth,
     compliance,
@@ -37,6 +38,7 @@ for r in (
     users.router,
     models.router,
     contracts.router,
+    assets.router,
     projects.router,
     compliance.router,
     generations.router,
