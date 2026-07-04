@@ -1,0 +1,17 @@
+{
+  "name": "在庫を減らす（スタッフ）",
+  "short_name": "在庫スタッフ",
+  "description": "バーコードで売れた在庫を減らす・売れ筋・売上を確認",
+  "start_url": "inventory-staff.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f4f5f5",
+  "theme_color": "#15201d",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
