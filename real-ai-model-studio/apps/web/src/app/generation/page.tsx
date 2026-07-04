@@ -8,15 +8,23 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
-import type { ComplianceResult } from "@rams/shared-types";
+import type { ComplianceResult, Model, Project } from "@rams/shared-types";
 import type { Output } from "@/types";
 
 export default function GenerationStudio() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [models, setModels] = useState<Model[]>([]);
   const [projectId, setProjectId] = useState("");
   const [modelId, setModelId] = useState("");
   const [prompt, setPrompt] = useState("");
   const [negative, setNegative] = useState("");
   const [check, setCheck] = useState<ComplianceResult | null>(null);
+
+  // Populate project/model pickers so testers never paste raw UUIDs.
+  useEffect(() => {
+    api.listProjects().then(setProjects).catch(() => setProjects([]));
+    api.listModels().then(setModels).catch(() => setModels([]));
+  }, []);
 
   const [genId, setGenId] = useState<string | null>(null);
   const [genStatus, setGenStatus] = useState<string | null>(null);
@@ -97,10 +105,22 @@ export default function GenerationStudio() {
         <h2>Generation Studio</h2>
         <div className="card">
           <div style={{ display: "flex", gap: 8 }}>
-            <input placeholder="project_id" value={projectId}
-              onChange={(e) => setProjectId(e.target.value)} style={{ padding: 8, flex: 1 }} />
-            <input placeholder="model_id" value={modelId}
-              onChange={(e) => setModelId(e.target.value)} style={{ padding: 8, flex: 1 }} />
+            <select value={projectId} style={{ padding: 8, flex: 1 }}
+              onChange={(e) => { setProjectId(e.target.value); setCheck(null); }}>
+              <option value="">案件を選択</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.project_name}</option>
+              ))}
+            </select>
+            <select value={modelId} style={{ padding: 8, flex: 1 }}
+              onChange={(e) => { setModelId(e.target.value); setCheck(null); }}>
+              <option value="">モデルを選択</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.stage_name}{m.adult_verified ? "" : "（未成人確認）"}
+                </option>
+              ))}
+            </select>
           </div>
           <textarea placeholder="プロンプト（許諾範囲内の広告表現）" value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
