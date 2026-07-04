@@ -7,7 +7,7 @@ never served directly — only via the gated download flow with signed URLs.
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
 from app.models.model import ModelAsset
 from app.schemas.common import ok
+from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT
 from app.services import audit_service
 from app.services.storage_service import store
 
@@ -35,10 +36,18 @@ async def upload_asset(
     usage_type: Annotated[str, Form()],
     consent_confirmed: Annotated[bool, Form()] = False,
 ):
+    if not file.filename:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "ファイルが指定されていません。")
     if asset_type not in _ALLOWED_ASSET:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"asset_type が不正です: {asset_type}")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"asset_type が不正です（{asset_type}）。指定可能な値: {', '.join(sorted(_ALLOWED_ASSET))}",
+        )
     if usage_type not in _ALLOWED_USAGE:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"usage_type が不正です: {usage_type}")
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"usage_type が不正です（{usage_type}）。指定可能な値: {', '.join(sorted(_ALLOWED_USAGE))}",
+        )
     # Training use requires explicit consent to be recorded at upload time.
     if usage_type == "training" and not consent_confirmed:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -70,9 +79,14 @@ def list_assets(
     model_id: str,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.MODEL_VIEW))],
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ):
     rows = db.scalars(
-        select(ModelAsset).where(ModelAsset.model_id == model_id, ModelAsset.deleted_at.is_(None))
+        select(ModelAsset)
+        .where(ModelAsset.model_id == model_id, ModelAsset.deleted_at.is_(None))
+        .limit(limit)
+        .offset(offset)
     ).all()
     return ok([{"id": str(a.id), "asset_type": a.asset_type, "usage_type": a.usage_type,
                 "original_filename": a.original_filename, "consent_confirmed": a.consent_confirmed}

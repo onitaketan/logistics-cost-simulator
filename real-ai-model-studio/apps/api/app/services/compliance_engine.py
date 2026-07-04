@@ -108,6 +108,11 @@ class RequirementInput:
     training_requested: bool = False
     age_appearance_change: bool = False
     prompt_flags: set[str] = field(default_factory=set)  # detected prohibited/warning flags
+    # model-specific NG rule hits (model_ng_rules): word/pose/scene/product the
+    # person or agency explicitly refused. Optional & defaults empty so existing
+    # callers and tests stay valid. Each entry is a human-readable label such as
+    # "ng_word:透け" or "ng_pose:寝そべり".
+    model_ng_hits: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -214,6 +219,17 @@ def evaluate(
 
     # ---- 5. Exposure & outfit (doc 05 §3, §4) ----
     _evaluate_exposure(requirement, permission, add, approvals)
+
+    # ---- 5b. Model-specific NG rules (model_ng_rules) — restrictive, NG ----
+    # A person/agency can forbid specific words, poses, scenes or products for
+    # their own likeness even when the base permission would otherwise allow it.
+    # These are NG (not Prohibited): the case can be revised, but not generated
+    # as-is. If the same text also tripped a prohibited term, that already won
+    # above (status precedence) — this only ever adds, never downgrades.
+    if requirement.model_ng_hits:
+        add("model_ng",
+            f"モデル固有のNG指定に抵触します（{sorted(requirement.model_ng_hits)}）。",
+            Status.NG)
 
     # ---- 6. Warning terms in prompt (doc 05 §8) — never auto-block, flag review ----
     warn_flags = {f for f in requirement.prompt_flags if f.startswith("warn:")}

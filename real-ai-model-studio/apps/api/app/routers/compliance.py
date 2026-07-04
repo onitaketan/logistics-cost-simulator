@@ -9,7 +9,7 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.rbac import Perm
@@ -21,7 +21,7 @@ from app.models.project import Project, ProjectRequirement
 from app.schemas.common import ok
 from app.schemas.dto import ComplianceCheckRequest
 from app.services import audit_service, compliance_engine as ce
-from app.services.prompt_filter import screen
+from app.services.prompt_filter import screen_with_model_ng
 
 router = APIRouter(prefix="/projects", tags=["compliance"])
 
@@ -36,6 +36,64 @@ def _latest_contract(db: Session, model_id: str) -> ModelContract | None:
 
 def _permission_for(db: Session, contract_id) -> ModelPermission | None:
     return db.scalar(select(ModelPermission).where(ModelPermission.contract_id == contract_id))
+
+
+def _model_ng_rules(db: Session, model_id: str) -> list[tuple[str, str]]:
+    """Load (rule_type, value) NG rules for a model.
+
+    ``model_ng_rules`` has no ORM mapping in this service, so read it directly.
+    Returns an empty list when the model has no NG rules (fail-open here only in
+    the sense that the base permission rules still apply — the engine remains the
+    authority).
+    """
+    rows = db.execute(
+        text("SELECT rule_type, value FROM model_ng_rules WHERE model_id = :m"),
+        {"m": str(model_id)},
+    ).all()
+    return [(r[0], r[1]) for r in rows]
+
+
+def _screen_and_collect_ng(
+    rules: list[tuple[str, str]],
+    prompt_text: str | None,
+    requirement: ProjectRequirement,
+    product_category: str,
+) -> tuple[set[str], set[str]]:
+    """Screen the prompt and collect model NG hits.
+
+    Returns ``(prompt_flags, model_ng_hits)``:
+      * prompt_flags — prohibited/warn flags for the engine (docs 05 §7/§8).
+      * model_ng_hits — model-specific NG labels the engine records as NG:
+          - ng_word  matched against the prompt text (via prompt_filter)
+          - ng_pose  matched against pose / expression descriptions
+          - ng_scene matched against scene type / background description
+          - ng_product matched against the project's product category
+    """
+    ng_words = {v for (t, v) in rules if t == "ng_word"}
+    flags = screen_with_model_ng(prompt_text, ng_words)
+    prompt_flags = {f for f in flags if not f.startswith("ng_word:")}
+    hits = {f for f in flags if f.startswith("ng_word:")}
+
+    def _text_hits(values: set[str], *fields: str | None) -> set[str]:
+        joined = " ".join(f for f in fields if f).lower()
+        return {v for v in values if v and v.lower() in joined}
+
+    for v in _text_hits(
+        {v for (t, v) in rules if t == "ng_pose"},
+        requirement.pose_description, requirement.expression_description,
+    ):
+        hits.add(f"ng_pose:{v}")
+    for v in _text_hits(
+        {v for (t, v) in rules if t == "ng_scene"},
+        requirement.scene_type, requirement.background_description,
+    ):
+        hits.add(f"ng_scene:{v}")
+    for v in _text_hits(
+        {v for (t, v) in rules if t == "ng_product"},
+        product_category,
+    ):
+        hits.add(f"ng_product:{v}")
+    return prompt_flags, hits
 
 
 @router.post("/{project_id}/compliance-check")
@@ -64,7 +122,10 @@ def run_check(
     if not permission:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "許諾範囲が未登録です。")
 
-    flags = screen(body.prompt_text)
+    ng_rules = _model_ng_rules(db, body.model_id)
+    prompt_flags, model_ng_hits = _screen_and_collect_ng(
+        ng_rules, body.prompt_text, requirement, project.product_category or ""
+    )
 
     result = ce.evaluate(
         model=ce.ModelInput(
@@ -104,7 +165,8 @@ def run_check(
             secondary_use=requirement.secondary_use,
             overseas=requirement.overseas,
             training_requested=body.training_requested,
-            prompt_flags=flags,
+            prompt_flags=prompt_flags,
+            model_ng_hits=model_ng_hits,
         ),
         today=date.today(),
     )

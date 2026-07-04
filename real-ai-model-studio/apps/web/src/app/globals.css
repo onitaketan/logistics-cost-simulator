@@ -25,5 +25,31 @@ body { margin: 0; font-family: system-ui, "Hiragino Kaku Gothic ProN", sans-seri
 .badge.prohibited { background: var(--prohibited); }
 button { background: var(--navy); color: #fff; border: 0; border-radius: 6px; padding: 8px 16px; cursor: pointer; }
 button:disabled { background: #b9c0cc; cursor: not-allowed; }
+button.ghost { background: transparent; color: var(--navy); border: 1px solid var(--line); }
+button.ghost:hover { background: #eef0f4; }
+button.small { padding: 4px 10px; font-size: 12px; }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+
+/* header bar inside app-main */
+.app-header { display: flex; align-items: center; justify-content: space-between; margin: -8px 0 20px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.badge.role { background: var(--navy); text-transform: uppercase; letter-spacing: .04em; }
+.badge.neutral { background: #6b7280; }
+
+/* KPI grid + tables */
+.kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.kpi-label { font-size: 12px; color: #667; }
+.kpi-value { font-size: 28px; font-weight: 700; }
+
+/* three-column compliance / detail layouts */
+.cols-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+.cols-2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.muted { color: #889; }
+.field { display: block; margin-bottom: 10px; }
+.field > span { display: block; font-size: 12px; color: #667; margin-bottom: 4px; }
+.field input, .field select, .field textarea { width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; border-bottom: 1px solid var(--line); }
+.tabs button { background: transparent; color: #556; border: 0; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; }
+.tabs button.active { color: var(--navy); border-bottom-color: var(--navy); font-weight: 600; }
+.thumb { width: 120px; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: #eef0f4; }
+.error { color: var(--ng); }

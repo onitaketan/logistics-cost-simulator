@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Sidebar } from "@/components/Sidebar";
+import { Shell } from "@/components/Shell";
 import "./globals.css";
 
 export const metadata = {
@@ -11,10 +11,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="ja">
       <body>
-        <div className="app-shell">
-          <Sidebar />
-          <main className="app-main">{children}</main>
-        </div>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );

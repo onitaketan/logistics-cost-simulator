@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,7 +10,7 @@ from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
 from app.models.model import Model
 from app.schemas.common import ok
-from app.schemas.dto import AdultVerify, ModelCreate, ModelUpdate
+from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, AdultVerify, ModelCreate, ModelUpdate
 from app.services import audit_service
 
 router = APIRouter(prefix="/models", tags=["models"])
@@ -27,12 +27,15 @@ def list_models(
     user: Annotated[CurrentUserDep, Depends(require(Perm.MODEL_VIEW))],
     status_: str | None = None,
     agency_name: str | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ):
     stmt = select(Model).where(Model.deleted_at.is_(None))
     if status_:
         stmt = stmt.where(Model.status == status_)
     if agency_name:
         stmt = stmt.where(Model.agency_name == agency_name)
+    stmt = stmt.limit(limit).offset(offset)
     return ok([_out(m) for m in db.scalars(stmt).all()])
 
 

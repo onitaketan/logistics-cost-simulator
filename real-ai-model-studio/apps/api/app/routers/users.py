@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from app.core.security import CurrentUserDep, hash_password, require
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.common import ok
-from app.schemas.dto import UserCreate, UserUpdate
+from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, UserCreate, UserUpdate
 from app.services import audit_service
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -26,12 +26,15 @@ def list_users(
     user: Annotated[CurrentUserDep, Depends(require(Perm.USER_MANAGE))],
     role: str | None = None,
     status_: str | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ):
     stmt = select(User)
     if role:
         stmt = stmt.where(User.role == role)
     if status_:
         stmt = stmt.where(User.status == status_)
+    stmt = stmt.limit(limit).offset(offset)
     return ok([_out(u) for u in db.scalars(stmt).all()])
 
 

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -9,7 +9,7 @@ from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
 from app.models.project import Project, ProjectModel, ProjectRequirement
 from app.schemas.common import ok
-from app.schemas.dto import ModelAssign, ProjectCreate, RequirementCreate
+from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, ModelAssign, ProjectCreate, RequirementCreate
 from app.services import audit_service
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -25,8 +25,11 @@ def _out(p: Project) -> dict:
 def list_projects(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_VIEW))],
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
 ):
-    rows = db.scalars(select(Project).where(Project.deleted_at.is_(None))).all()
+    stmt = select(Project).where(Project.deleted_at.is_(None)).limit(limit).offset(offset)
+    rows = db.scalars(stmt).all()
     return ok([_out(p) for p in rows])
 
 

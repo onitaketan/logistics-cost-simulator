@@ -56,19 +56,28 @@ pytest                                              # 判定エンジン・承�
 - [x] 初期データ投入 scripts/seed.py（admin / mock engine / scope 辞書）
 - [x] Storage: local backend 実装（実書き込み・SHA-256・HMAC署名URL・traversal防御）+ `/files` 署名アクセス
 - [x] **統合テスト（実Postgres）**: 生成が API層とDB層の両方でブロックされることを実証
-- [x] Next.js フロント骨格 + APIクライアント + 共有型
+- [x] フロント実結線（全画面をAPIへ結線・認証ガード・生成ポーリング・承認の不足表示・監査フィルタ）
+- [x] API入力バリデーション（Literal enum / 範囲 / 空文字拒否 / 期間整合）＋日本語エラー＋ページング
+- [x] 判定の作り込み（禁止/要注意辞書の拡充・**モデル固有NGルール**統合）＋判定テスト60件
+- [x] デモデータ scripts/seed_demo.py（OK/Conditional/NG/Prohibited を網羅する仮テスト用データ）
 - [ ] Storage: S3/R2（SSE-KMS）バックエンドの結線（interfaceは用意済み・boto3差込）
-- [ ] 生成の非同期化（Celery/Redis ワーカーへ移譲）
+- [ ] 生成の非同期化（Celery/Redis ワーカーへ移譲）※**仮テスト後**に実施（API契約変更を伴うため）
 - [ ] 本人/事務所 承認ポータル（P2）
 
 ## Testing
 
 ```bash
 cd apps/api
-pytest tests/test_compliance_engine.py tests/test_approval_service.py tests/test_storage_service.py  # DB不要（30件）
-# 統合テスト（実Postgres必須。schema適用+seed済みのDBを指す DATABASE_URL を渡す）:
-DATABASE_URL=postgresql+psycopg://... pytest tests/test_integration_flow.py                          # 3件（DBなしなら自動skip）
+# DB不要のユニット（判定・承認・Storage・判定マトリクス）: 105件
+pytest tests/test_compliance_engine.py tests/test_approval_service.py \
+       tests/test_storage_service.py tests/test_compliance_rules_matrix.py
+# 統合テスト（実Postgres必須。schema適用+seed済みのDBを指す DATABASE_URL を渡す）: 3件（DBなしなら自動skip）
+DATABASE_URL=postgresql+psycopg://... pytest tests/test_integration_flow.py
+# 仮テスト用のデモデータ投入:
+DATABASE_URL=... python scripts/seed_demo.py
 ```
+
+合計 **108 テスト green**（ユニット105 + 実Postgres統合3）。
 
 > ドライバ注意: 本番は `psycopg` (v3) を想定。CI/ローカルで v3 のC拡張が壊れている場合は
 > `postgresql+psycopg2://...` でも動作します（ORMはドライバ非依存）。

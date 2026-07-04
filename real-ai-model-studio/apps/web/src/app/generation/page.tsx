@@ -1,29 +1,66 @@
 "use client";
 
-// Generation Studio (docs/02 §9). The Generate button is DISABLED unless a
-// compliance check id exists with status ok/conditional. This is a UI courtesy
-// only — the backend re-validates and the DB trigger enforces regardless.
+// Generation Studio (docs/02 §9). Generate is DISABLED unless a compliance check
+// exists with status ok/conditional — a UI courtesy only; the backend re-validates
+// and the DB trigger enforces regardless. After generation we poll the (synchronous
+// mechanism kept as-is) job until completed, then render the outputs.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import type { ComplianceResult } from "@rams/shared-types";
+import type { Output } from "@/types";
 
 export default function GenerationStudio() {
   const [projectId, setProjectId] = useState("");
   const [modelId, setModelId] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [negative, setNegative] = useState("");
   const [check, setCheck] = useState<ComplianceResult | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+
+  const [genId, setGenId] = useState<string | null>(null);
+  const [genStatus, setGenStatus] = useState<string | null>(null);
+  const [outputs, setOutputs] = useState<Output[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canGenerate =
     !!check?.compliance_check_id &&
     (check.check_status === "ok" || check.check_status === "conditional");
 
+  // Poll the generation job while it is not terminal.
+  useEffect(() => {
+    if (!genId) return;
+    const terminal = (s: string) => s === "completed" || s === "failed";
+
+    async function poll() {
+      try {
+        const g = await api.getGeneration(genId as string);
+        setGenStatus(g.status);
+        if (terminal(g.status)) {
+          if (timer.current) clearInterval(timer.current);
+          if (g.status === "completed") {
+            setOutputs(await api.listOutputs(genId as string));
+          }
+        }
+      } catch (e) {
+        if (timer.current) clearInterval(timer.current);
+        setError((e as Error).message);
+      }
+    }
+
+    poll();
+    timer.current = setInterval(poll, 2000);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
+  }, [genId]);
+
   async function runCheck() {
     setError(null);
     try {
-      setCheck(await api.runComplianceCheck(projectId, modelId, prompt));
+      setCheck(await api.runComplianceCheck(projectId, modelId, prompt || undefined));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -31,50 +68,112 @@ export default function GenerationStudio() {
 
   async function generate() {
     setError(null);
+    setOutputs([]);
+    setGenStatus(null);
+    setBusy(true);
     try {
       const res = await api.createGeneration({
         project_id: projectId,
         model_id: modelId,
-        compliance_check_id: check!.compliance_check_id,
+        compliance_check_id: check!.compliance_check_id as string,
         prompt_text: prompt,
+        negative_prompt_text: negative || undefined,
         generation_params: { output_count: 4, width: 1024, height: 1280 },
       });
-      setStatus(`generation ${res.generation_id}: ${res.status}`);
+      setGenId(res.generation_id);
+      setGenStatus(res.status);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setBusy(false);
     }
   }
 
+  const running = genStatus !== null && genStatus !== "completed" && genStatus !== "failed";
+
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+    <div className="cols-2">
       <div>
         <h2>Generation Studio</h2>
         <div className="card">
-          <input placeholder="project_id" value={projectId} onChange={(e) => setProjectId(e.target.value)}
-            style={{ padding: 8, marginRight: 8, width: 240 }} />
-          <input placeholder="model_id" value={modelId} onChange={(e) => setModelId(e.target.value)}
-            style={{ padding: 8, width: 240 }} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <input placeholder="project_id" value={projectId}
+              onChange={(e) => setProjectId(e.target.value)} style={{ padding: 8, flex: 1 }} />
+            <input placeholder="model_id" value={modelId}
+              onChange={(e) => setModelId(e.target.value)} style={{ padding: 8, flex: 1 }} />
+          </div>
           <textarea placeholder="プロンプト（許諾範囲内の広告表現）" value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            style={{ width: "100%", padding: 8, minHeight: 100, marginTop: 8 }} />
+            style={{ width: "100%", padding: 8, minHeight: 90, marginTop: 8 }} />
+          <textarea placeholder="ネガティブプロンプト（任意）" value={negative}
+            onChange={(e) => setNegative(e.target.value)}
+            style={{ width: "100%", padding: 8, minHeight: 50, marginTop: 8 }} />
           <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
             <button onClick={runCheck}>コンプライアンス判定</button>
-            <button onClick={generate} disabled={!canGenerate}>生成する</button>
+            <button onClick={generate} disabled={!canGenerate || busy || running}>
+              {running ? "生成中…" : "生成する"}
+            </button>
           </div>
+          {!canGenerate && (
+            <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+              判定が OK / 条件付き の場合のみ生成できます。
+            </p>
+          )}
         </div>
-        {status && <div className="card">{status}</div>}
-        {error && <p style={{ color: "var(--ng)" }}>{error}</p>}
+
+        {genId && (
+          <div className="card">
+            <h3>生成ジョブ</h3>
+            <p>
+              generation: {genId} — 状態:{" "}
+              <span className="badge neutral">{genStatus ?? "…"}</span>
+            </p>
+
+            {outputs.length > 0 && (
+              <>
+                <p className="muted" style={{ fontSize: 12 }}>
+                  レビュー・承認は <Link href="/review">Review</Link> 画面で行えます。
+                </p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
+                  {outputs.map((o) => (
+                    <div key={o.id} style={{ textAlign: "center" }}>
+                      <div className="thumb" />
+                      <div style={{ fontSize: 11 }} className="muted">
+                        {o.width ?? "?"}×{o.height ?? "?"}
+                      </div>
+                      <div style={{ fontSize: 11 }}>{o.output_status}</div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {genStatus === "completed" && outputs.length === 0 && (
+              <p className="muted">出力がありません。</p>
+            )}
+            {genStatus === "failed" && <p className="error">生成に失敗しました。</p>}
+          </div>
+        )}
+
+        {error && <p className="error">{error}</p>}
       </div>
 
       <aside className="card">
         <h3>判定サマリ</h3>
         {check ? (
           <>
-            <p>ステータス: <span className={`badge ${check.check_status}`}>{check.check_status}</span></p>
+            <p>
+              ステータス:{" "}
+              <span className={`badge ${check.check_status}`}>{check.check_status}</span>
+            </p>
             <p>{check.check_summary}</p>
+            {check.required_approvals.length > 0 && (
+              <p>必要承認: {check.required_approvals.join(" ・ ")}</p>
+            )}
           </>
         ) : (
-          <p style={{ color: "#889" }}>先に判定を実行してください。判定を通過しない限り生成できません。</p>
+          <p className="muted">
+            先に判定を実行してください。判定を通過しない限り生成できません。
+          </p>
         )}
       </aside>
     </div>
