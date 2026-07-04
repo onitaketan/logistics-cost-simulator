@@ -79,6 +79,13 @@ DATABASE_URL=... python scripts/seed_demo.py
 
 合計 **108 テスト green**（ユニット105 + 実Postgres統合3）。
 
+### Frontend type-check
+
+```bash
+npm install            # ルートで実行（npm workspaces）
+npm run typecheck      # = tsc --noEmit（apps/web）。src 配下エラー0で通過
+```
+
 > ドライバ注意: 本番は `psycopg` (v3) を想定。CI/ローカルで v3 のC拡張が壊れている場合は
 > `postgresql+psycopg2://...` でも動作します（ORMはドライバ非依存）。
 
