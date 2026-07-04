@@ -155,6 +155,24 @@ input:focus{border-color:var(--akb)}
 .hide{display:none!important}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 @media(max-width:400px){.chips{grid-template-columns:1fr}}
+
+/* ===== 質感アップ ===== */
+.tab,.store-pill,.chip,.pick{transition:transform .06s ease,background .15s,border-color .15s,color .15s}
+.tab:active,.store-pill:active,.chip:active{transform:translateY(1px)}
+
+/* ===== ダークモード ===== */
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0e1412;--card:#18211d;--soft:#1f2a25;--line:#2a352f;--line2:#384741;
+    --ink:#e9efec;--ink2:#b6c2bc;--ink3:#8ea099;
+  }
+  .tab.active,.store-pill.on{background:#127a5b;border-color:#127a5b;color:#fff}
+  .conn.ok{background:rgba(84,196,147,.16);color:#77dcae}
+  .conn.bad{background:rgba(240,137,122,.16);color:#f2a99b}
+  .msg.new{background:rgba(227,171,92,.16);color:#e8bd7c}
+  /* 赤系テキストはダーク背景で少し明るく */
+  .srow .sqty.neg,.recent .rc-q,.qtybox .cur.neg,.pick .pq.neg,.chip .cmeta .st.neg{color:#f2a99b}
+}
 </style>
 </head>
 <body>

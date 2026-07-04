@@ -150,6 +150,35 @@ input:focus,select:focus{border-color:var(--akb);box-shadow:0 0 0 3px rgba(40,95
 a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.tab:focus-visible,.store-pill:focus-visible{outline:3px solid #1f6feb;outline-offset:2px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 @media(max-width:560px){.grid2{grid-template-columns:1fr}h1{font-size:18px}.hero-store .hs-qty{font-size:22px}}
+
+/* ===== 質感アップ ===== */
+.callout.ok-day{background:#d9efe6;border-color:#b6e0cf;color:#0c4a37}
+.btn,.tab,.store-pill{transition:transform .06s ease,background .15s,border-color .15s,color .15s}
+.btn:active,.tab:active,.store-pill:active{transform:translateY(1px)}
+.panel{transition:border-color .15s,box-shadow .15s}
+.item{transition:border-color .15s,box-shadow .15s}
+
+/* ===== ダークモード ===== */
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0e1412;--card:#18211d;--soft:#1f2a25;--line:#2a352f;--line2:#384741;
+    --ink:#e9efec;--ink2:#b6c2bc;--ink3:#8ea099;
+  }
+  /* --ink を背景に使う選択状態は反転して見えなくなるため緑アクセントに */
+  .tab.active,.btn.primary,.store-pill.on{background:#127a5b;border-color:#127a5b;color:#fff}
+  .btn.primary:hover{background:#0f6b50}
+  .conn.ok,.jan-badge.known{background:rgba(84,196,147,.16);color:#77dcae}
+  .conn.bad{background:rgba(240,137,122,.16);color:#f2a99b}
+  .jan-badge.newp{background:rgba(227,171,92,.16);color:#e8bd7c}
+  .callout{background:rgba(95,160,220,.12);border-color:rgba(95,160,220,.30);color:#cfdaea}
+  .callout.warn{background:rgba(227,171,92,.13);border-color:rgba(227,171,92,.32);color:#e8cfa4}
+  .callout.ok-day{background:rgba(84,196,147,.16);border-color:rgba(84,196,147,.34);color:#90e0bb}
+  .btn.danger{border-color:rgba(240,137,122,.5)}
+  .btn.danger:hover{background:rgba(240,137,122,.13)}
+  .item.neg{border-color:rgba(240,137,122,.5)}
+  /* 赤系テキストはダーク背景で少し明るく */
+  .srow .sqty.neg,.rec-sold,.day-total,.drow .dq{color:#f2a99b}
+}
 </style>
 </head>
 <body>
@@ -584,7 +613,7 @@ async function renderClose(){
     (mv.data||[]).forEach(r=>{ if(r.type==="out"&&!r.undone){ sold[r.product_id]=(sold[r.product_id]||0)+(-r.delta); } });
     const ids=Object.keys(sold).filter(id=>sold[id]!==0);
     const closed = dc.data;
-    if(closed){ $("#clStatus").innerHTML=`<div class="callout" style="margin-bottom:12px;background:#d9efe6;border-color:#b6e0cf;color:#0c4a37">✅ この日は確定済みです（売上 ${closed.sold_count} 点／確定者：${esc(closed.confirmed_by||'—')}）</div>`; }
+    if(closed){ $("#clStatus").innerHTML=`<div class="callout ok-day" style="margin-bottom:12px">✅ この日は確定済みです（売上 ${closed.sold_count} 点／確定者：${esc(closed.confirmed_by||'—')}）</div>`; }
     if(!ids.length){ $("#clList").innerHTML=`<div class="empty" style="padding:1.5rem"><div class="big">🧾</div>この日の売上記録はありません。</div>`; }
     else{
       let total=0; let html="";
