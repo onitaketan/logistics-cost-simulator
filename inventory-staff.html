@@ -140,7 +140,8 @@ input:focus{border-color:var(--akb)}
 .rep-sum{font-size:13px;color:var(--ink2);margin-bottom:12px;padding:10px 12px;background:var(--soft);border-radius:var(--r-sm)}
 .rep-sum b{font-family:var(--mono);color:var(--ink)}
 
-.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:15px;padding:14px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:93vw;display:flex;align-items:center;gap:12px}
+.toast{position:fixed;bottom:max(22px,calc(env(safe-area-inset-bottom) + 14px));left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:15px;padding:14px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:93vw;display:flex;align-items:center;gap:12px}
+.offline-banner{position:fixed;top:0;left:0;right:0;background:var(--bad);color:#fff;font-size:14px;font-weight:600;text-align:center;padding:12px;z-index:300}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto}
 .toast.err{background:var(--bad)}.toast.warn{background:var(--warn)}.toast.ok{background:var(--good)}
 .toast button{background:rgba(255,255,255,.25);border:none;color:#fff;font-family:inherit;font-size:14px;font-weight:700;padding:8px 14px;border-radius:16px;cursor:pointer;white-space:nowrap}
@@ -215,12 +216,16 @@ input:focus{border-color:var(--akb)}
   <div class="foot">在庫データは店長のPCと共有されています。<br>入荷や修正は店長にお願いしてください。</div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
 const SB_URL="https://kqkfbulbravvtepqfbiu.supabase.co";
 const SB_KEY="sb_publishable_y435jKLlmTVGD2MTM9wrBg_S9ombPgm";
+if(typeof supabase==="undefined"||!supabase.createClient){
+  document.body.insertAdjacentHTML("afterbegin",'<div class="offline-banner">アプリの読み込みに失敗しました。通信環境をご確認のうえ、ページを再読み込みしてください。</div>');
+  throw new Error("supabase-js failed to load");
+}
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s);
@@ -279,7 +284,7 @@ function renderStores(){
 /* 売れ筋 */
 function renderTop(){
   const el=$("#topSellers"); const sid=curStoreId();
-  if(!TOP.length){ el.innerHTML=`<div class="empty" style="padding:1rem"><div class="big">🔥</div>まだ売上データがありません。<br>売れると自動でここに並びます。</div>`; return; }
+  if(!TOP.length){ el.className=""; el.innerHTML=`<div class="empty" style="padding:1rem"><div class="big">🔥</div>まだ売上データがありません。<br>売れると自動でここに並びます。</div>`; return; }
   el.className="chips"; el.innerHTML="";
   TOP.forEach((t,i)=>{ const qy=qtyAt(t.product_id,sid);
     const b=document.createElement("div"); b.className="chip"+(i<3?(" top"+(i+1)):"");
@@ -322,7 +327,7 @@ function showProduct(jan,keepScroll){
     <div class="qtybox"><span class="lab">${esc(storeName(sid))}の在庫</span><span class="cur ${qy<0?'neg':''}">${qy}</span><span class="lab">点</span></div>
     <span class="label">売れた数</span>
     <div class="qstep"><button id="qMinus">−</button><span class="qv" id="qv">${sellQty}</span><button id="qPlus">＋</button></div>
-    <button class="btn sell" id="sellDo">➖ 「売れた」で在庫を減らす</button>
+    <button class="btn sell" id="sellDo">➖ <b style="font-weight:700">${esc(storeName(sid))}</b>で「売れた」（在庫を減らす）</button>
     <button class="btn ghost" id="sellCancel" style="margin-top:8px">キャンセル</button>`;
   $("#qMinus").onclick=()=>{ sellQty=Math.max(1,sellQty-1); $("#qv").textContent=sellQty; };
   $("#qPlus").onclick=()=>{ sellQty=sellQty+1; $("#qv").textContent=sellQty; };
@@ -333,7 +338,9 @@ async function doSell(p){
   const sid=curStoreId();
   $("#sellDo").disabled=true;
   const {data,error}=await sb.rpc("inv_record_sale",{p_store:sid,p_jan:p.jan,p_qty:sellQty,p_actor:actor()});
-  if(error){ $("#sellDo").disabled=false; toast(errMsg(error),"err"); return; }
+  if(error){ $("#sellDo").disabled=false; await loadAll();
+    toast("記録できたか確認できませんでした。在庫を確認してください（通信状況もご確認を）","err"); return; }
+  if(!data){ $("#sellDo").disabled=false; toast("応答が不正です。在庫を確認してください","err"); return; }
   const after=data.qty_after,mid=data.movement_id;
   selJan=null; $("#sellPanel").classList.add("hide");
   await loadAll();
@@ -343,7 +350,7 @@ async function doSell(p){
 async function undo(mid){
   const {data,error}=await sb.rpc("inv_undo_sale",{p_movement_id:mid,p_actor:actor()});
   if(error){ toast(errMsg(error),"err"); return; }
-  await loadAll(); toast("取り消しました（在庫 "+data.qty_after+" 点）","ok");
+  await loadAll(); toast("取り消しました（在庫 "+((data&&data.qty_after)!=null?data.qty_after:"?")+" 点）","ok");
 }
 $("#janInput").addEventListener("change",e=>onJan(e.target.value));
 $("#janInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault();onJan(e.target.value);} });
@@ -357,7 +364,7 @@ function renderFind(){
   if(!list.length){ box.innerHTML=`<div class="empty"><div class="big">📦</div>${q?"見つかりませんでした":"商品がまだありません"}</div>`; return; }
   list.slice(0,120).forEach(p=>{
     let rows=""; STORES.forEach(s=>{const qy=qtyAt(p.id,s.id),sh=shelfAt(p.id,s.id);
-      rows+=`<div class="srow"><span class="sdot" style="background:${s.color}"></span><span class="sname">${esc(s.name)}</span>
+      rows+=`<div class="srow"><span class="sdot" style="background:${esc(s.color)}"></span><span class="sname">${esc(s.name)}</span>
         <span class="sqty ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy} 点</span><span class="sshelf">${sh?'📍 '+esc(sh):''}</span></div>`;});
     const d=document.createElement("div"); d.className="item";
     d.innerHTML=`<div class="item-name">${esc(p.name)}</div><div class="item-meta">${p.model?esc(p.model)+" ／ ":""}JAN ${esc(p.jan)}</div>${rows}`;
@@ -427,7 +434,7 @@ function startScan(){
   $("#scanBtn").classList.add("hide"); $("#scanStopRow").classList.remove("hide");
   scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},
     dec=>{ selectProduct(dec.trim()); if(navigator.vibrate)navigator.vibrate(80); stopScan(); },()=>{})
-  .catch(()=>{ toast("カメラを起動できません。許可設定をご確認ください","err"); $("#scanBtn").classList.remove("hide"); $("#scanStopRow").classList.add("hide"); scanner=null; });
+  .catch(()=>{ toast("カメラが使えません。下の番号入力をお使いください（設定でカメラ許可も可）","err"); $("#scanBtn").classList.remove("hide"); $("#scanStopRow").classList.add("hide"); scanner=null; });
 }
 function stopScan(){ $("#scanBtn").classList.remove("hide"); $("#scanStopRow").classList.add("hide");
   if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});} }

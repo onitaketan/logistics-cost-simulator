@@ -65,7 +65,7 @@ h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
 .p-title{font-size:11.5px;font-weight:600;color:var(--ink2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px}
 .ig{margin-bottom:12px}
 .il{font-size:13px;color:var(--ink2);margin-bottom:5px;display:block;font-weight:500}
-input[type=number],input[type=text],input[type=search],input[type=password],input[type=date],select{font-family:inherit;font-size:15px;padding:11px 12px;min-height:44px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--soft);color:var(--ink);width:100%;outline:none}
+input[type=number],input[type=text],input[type=search],input[type=password],input[type=date],select{font-family:inherit;font-size:16px;padding:11px 12px;min-height:44px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--soft);color:var(--ink);width:100%;outline:none}
 input.jan,input[type=number]{font-family:var(--mono)}
 input:focus,select:focus{border-color:var(--akb);box-shadow:0 0 0 3px rgba(40,95,156,.15)}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -139,7 +139,8 @@ input:focus,select:focus{border-color:var(--akb);box-shadow:0 0 0 3px rgba(40,95
 .modal h3{font-size:17px;margin-bottom:6px}
 .modal p{font-size:13px;color:var(--ink2);margin-bottom:14px;line-height:1.6}
 
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;padding:12px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:92vw;text-align:center;display:flex;align-items:center;gap:12px}
+.toast{position:fixed;bottom:max(24px,calc(env(safe-area-inset-bottom) + 14px));left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:#fff;font-size:14px;padding:12px 20px;border-radius:24px;opacity:0;pointer-events:none;transition:all .25s;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.25);max-width:92vw;text-align:center;display:flex;align-items:center;gap:12px}
+.offline-banner{position:fixed;top:0;left:0;right:0;background:var(--bad);color:#fff;font-size:14px;font-weight:600;text-align:center;padding:12px;z-index:300}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--bad)}
 .toast.warn{background:var(--warn)}
@@ -319,7 +320,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 "use strict";
@@ -328,6 +329,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
    ============================================================ */
 const SB_URL = "https://kqkfbulbravvtepqfbiu.supabase.co";
 const SB_KEY = "sb_publishable_y435jKLlmTVGD2MTM9wrBg_S9ombPgm";
+if(typeof supabase==="undefined"||!supabase.createClient){
+  document.body.insertAdjacentHTML("afterbegin",'<div class="offline-banner">アプリの読み込みに失敗しました。通信環境をご確認のうえ、ページを再読み込みしてください。</div>');
+  throw new Error("supabase-js failed to load");
+}
 const sb = supabase.createClient(SB_URL, SB_KEY);
 
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
@@ -377,7 +382,10 @@ async function loadAll(){
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{ (STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf}; });
     setConn(true);
-    renderHero(); renderSearch(); renderStorePills(); renderMoveSelects(); renderSettings();
+    renderHero(); renderSearch(); renderStorePills();
+    // 移動/設定タブは編集中の入力を消さないよう、非表示のときだけ再描画（表示中はタブ切替時に描画）
+    if($("#tab-move").classList.contains("hide")) renderMoveSelects();
+    if($("#tab-settings").classList.contains("hide")) renderSettings();
     return true;
   }catch(e){ setConn(false); toast("読み込みに失敗："+errMsg(e),"err"); return false; }
 }
@@ -411,7 +419,7 @@ function renderSearch(){
     const total=totalOf(p.id); const neg=STORES.some(s=>qtyAt(p.id,s.id)<0);
     let rows="";
     STORES.forEach(s=>{ const qy=qtyAt(p.id,s.id),sh=shelfAt(p.id,s.id);
-      rows+=`<div class="srow"><span class="sdot" style="background:${s.color}"></span><span class="sname">${esc(s.name)}</span>
+      rows+=`<div class="srow"><span class="sdot" style="background:${esc(s.color)}"></span><span class="sname">${esc(s.name)}</span>
         <span class="sqty ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy} 点</span><span class="sshelf">${sh?'📍 '+esc(sh):''}</span></div>`; });
     const d=document.createElement("div"); d.className="item"+(total<=0?" zero":"")+(neg?" neg":"");
     d.innerHTML=`<div class="item-head"><div>
@@ -461,16 +469,16 @@ async function doSell(p){
   if(qty<1){ toast("数量は1以上","err"); return; }
   $("#sellDo").disabled=true;
   const {data,error}=await sb.rpc("inv_record_sale",{p_store:sid,p_jan:p.jan,p_qty:qty,p_actor:actor()});
-  $("#sellDo").disabled=false;
-  if(error){ toast(errMsg(error),"err"); return; }
+  if(error){ $("#sellDo").disabled=false; await loadAll(); toast("記録できたか確認できませんでした。在庫を確認してください","err"); return; }
+  if(!data){ $("#sellDo").disabled=false; toast("応答が不正です。在庫を確認してください","err"); return; }
   const after=data.qty_after, mid=data.movement_id;
+  $("#sellJan").value=""; $("#sellTarget").innerHTML="";   // ボタンごと除去してから更新（二重送信防止）
   await loadAll();
   if(data.short){
     toast(`記録しました（在庫 ${after} 点）。在庫0以下です。店長に確認を`, "warn", "取り消し", ()=>undoSale(mid));
   }else{
     toast(`${storeName(sid)}：「${p.name}」−${qty} → 残り ${after} 点`, null, "取り消し", ()=>undoSale(mid));
   }
-  $("#sellJan").value=""; $("#sellTarget").innerHTML="";
 }
 async function undoSale(mid){
   const {data,error}=await sb.rpc("inv_undo_sale",{p_movement_id:mid,p_actor:actor()});
@@ -630,7 +638,7 @@ $("#clDate")&&$("#clDate").addEventListener("change",renderClose);
 function renderSettings(){
   const el=$("#setStores"); if(!el)return; el.innerHTML="";
   STORES.forEach(s=>{ const row=document.createElement("div"); row.style.cssText="display:flex;gap:9px;align-items:center;margin-bottom:10px";
-    row.innerHTML=`<span style="width:11px;height:11px;border-radius:50%;background:${s.color};flex-shrink:0"></span>`;
+    row.innerHTML=`<span style="width:11px;height:11px;border-radius:50%;background:${esc(s.color)};flex-shrink:0"></span>`;
     const inp=document.createElement("input"); inp.type="text"; inp.value=s.name; inp.style.flex="1";
     const btn=document.createElement("button"); btn.className="btn"; btn.textContent="変更"; btn.style.minHeight="44px";
     btn.onclick=async()=>{ if(!MPIN){toast("店長ログインが必要","err");return;}
@@ -707,6 +715,8 @@ function switchTab(name){
   });
   stopAllScanners();
   if(name==="close") renderClose();
+  if(name==="move") renderMoveSelects();
+  if(name==="settings") renderSettings();
 }
 $$(".tab").forEach(t=>t.addEventListener("click",()=>{
   if(t.classList.contains("mgr-only")&&!MPIN){ openLogin(); return; }
@@ -727,7 +737,7 @@ function startScan(readerId,startBtn,stopBtn,onResult){
   startBtn.classList.add("hide"); stopBtn.classList.remove("hide");
   scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},
     dec=>{ onResult(dec); if(navigator.vibrate)navigator.vibrate(80); stopScan(startBtn,stopBtn); }, ()=>{})
-  .catch(()=>{ toast("カメラを起動できませんでした。許可設定をご確認ください","err"); startBtn.classList.remove("hide"); stopBtn.classList.add("hide"); scanner=null; });
+  .catch(()=>{ toast("カメラが使えません。JANコードの手入力をお使いください（設定でカメラ許可も可）","err"); startBtn.classList.remove("hide"); stopBtn.classList.add("hide"); scanner=null; });
 }
 function stopScan(a,b){ if(a)a.classList.remove("hide"); if(b)b.classList.add("hide"); if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});} }
 function stopAllScanners(){ if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});}
