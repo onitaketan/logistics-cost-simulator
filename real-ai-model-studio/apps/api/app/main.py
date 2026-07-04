@@ -6,6 +6,7 @@ all tables on Base.metadata.
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import app.models  # noqa: F401  (register ORM tables)
@@ -30,6 +31,16 @@ app = FastAPI(
     title="Real AI Model Studio API",
     version="0.1.0",
     description="社内専用・実在AIモデル生成基盤。生成可否は Backend/API/DB で強制する。",
+)
+
+# Browser frontend runs on a separate origin (split deployment). Allow only the
+# configured origins; never use "*" here since requests carry the bearer token.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 API_PREFIX = "/api/v1"
