@@ -55,7 +55,11 @@ class OpenAIAdapter(AIEngineAdapter):
         model: str = DEFAULT_MODEL,
     ) -> None:
         self._client = client
-        self._base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
+        # base_url precedence: explicit arg > OPENAI_BASE_URL env (Azure/proxy/
+        # self-hosted gateway) > public OpenAI endpoint.
+        self._base_url = (
+            base_url or os.environ.get("OPENAI_BASE_URL") or DEFAULT_BASE_URL
+        ).rstrip("/")
         # Do NOT import app.core.config — read the key straight from the env.
         self._api_key = (
             api_key
