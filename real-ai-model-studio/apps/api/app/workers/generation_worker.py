@@ -28,7 +28,6 @@ def run_generation_job(generation_id: str) -> dict:
     from app.db.session import SessionLocal
     from app.models.generation import AIEngine, Generation, GenerationOutput
     from app.services.ai_engines import get_adapter
-    from app.services.storage_service import compute_hash
 
     db = SessionLocal()
     try:
@@ -63,12 +62,16 @@ def run_generation_job(generation_id: str) -> dict:
             )
         )
 
-        for img in images:
+        for i, img in enumerate(images):
+            # Persist the REAL image into our own storage (encrypted, hashed).
+            # A provider URL is temporary and must never be our stored file
+            # (CLAUDE.md #6; file_hash rule). Mock keeps a placeholder path.
+            file_path, file_hash = _persist_image(img, str(generation.id), i)
             db.add(
                 GenerationOutput(
                     generation_id=generation.id,
-                    file_path=img.file_path,
-                    file_hash=compute_hash(img.file_path.encode()),
+                    file_path=file_path,
+                    file_hash=file_hash,
                     width=img.width,
                     height=img.height,
                     output_status="candidate",
@@ -96,6 +99,41 @@ def run_generation_job(generation_id: str) -> dict:
         return {"generation_id": generation_id, "status": "failed"}
     finally:
         db.close()
+
+
+def _persist_image(img, generation_id: str, index: int) -> tuple[str, str]:
+    """Store a produced image and return (stored_uri, sha256_of_bytes).
+
+    Resolution order for the real bytes:
+      1. ``img.data`` — bytes the provider returned inline (e.g. gpt-image-1 b64);
+      2. ``img.source_url`` or an http(s) ``img.file_path`` — download the bytes;
+      3. neither (the mock engine) — keep the placeholder path and hash the path.
+    Real bytes are written through ``storage_service.store`` so they land in the
+    configured backend (local / S3 / R2) encrypted, and the hash is of the actual
+    image content — not of a URL string.
+    """
+    from app.services.storage_service import compute_hash, store
+
+    raw = img.data
+    if raw is None:
+        url = img.source_url
+        if url is None and isinstance(img.file_path, str) and img.file_path.startswith(
+            ("http://", "https://")
+        ):
+            url = img.file_path
+        if url:
+            import httpx
+
+            resp = httpx.get(url, timeout=60.0)
+            resp.raise_for_status()
+            raw = resp.content
+
+    if raw is None:
+        # Mock / no real bytes: keep the placeholder path, hash the path string.
+        return img.file_path, compute_hash(img.file_path.encode())
+
+    uri, file_hash = store(raw, key=f"generations/{generation_id}/{index}.png", encrypt=True)
+    return uri, file_hash
 
 
 def _record_failure(generation_id: str, reason: str) -> None:

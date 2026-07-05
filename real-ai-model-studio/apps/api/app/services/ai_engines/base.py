@@ -20,10 +20,16 @@ class AIEngineError(RuntimeError):
 
 @dataclass
 class GeneratedImage:
-    file_path: str        # path/URI to the stored image
+    # A produced image the worker will persist. Adapters populate EITHER:
+    #  * `data`  — raw image bytes (e.g. gpt-image-1 b64), OR
+    #  * `source_url` — an https URL the worker downloads, OR
+    #  * neither, for the mock engine (file_path is a placeholder).
+    file_path: str        # location/URI or placeholder for the produced image
     width: int
     height: int
     seed: int | None = None
+    data: bytes | None = None        # raw bytes when the provider returns them inline
+    source_url: str | None = None    # https URL to fetch when bytes are not inline
 
 
 class AIEngineAdapter(ABC):

@@ -81,21 +81,24 @@ class OpenAIAdapter(AIEngineAdapter):
             "Content-Type": "application/json",
         }
 
-    async def _download(self, entry: dict[str, Any], index: int) -> str:
-        """Resolve a single API result entry to a stored image location.
+    async def _resolve(
+        self, entry: dict[str, Any], index: int
+    ) -> tuple[str, bytes | None, str | None]:
+        """Resolve one API result entry to (location, data, source_url).
 
-        Seam intentionally kept trivial and side-effect-free so it can be
-        overridden to persist bytes via the storage service (owned elsewhere).
-        The OpenAI response returns either a ``url`` (DALL·E) or ``b64_json``
-        (gpt-image-1); we return a location string in both cases.
+        OpenAI returns either a ``url`` (DALL·E) or ``b64_json`` (gpt-image-1).
+        We carry the bytes/URL through so the worker persists the REAL image via
+        the storage service (encrypted, hashed) — the provider URL is temporary
+        and must not be treated as our stored file.
         """
         url = entry.get("url")
         if url:
-            return str(url)
-        if entry.get("b64_json"):
-            # Base64 payload — hand back an addressable location. A production
-            # override persists the decoded bytes through storage_service.
-            return f"openai://b64/{index}.png"
+            return str(url), None, str(url)
+        b64 = entry.get("b64_json")
+        if b64:
+            import base64
+
+            return f"openai://b64/{index}.png", base64.b64decode(b64), None
         raise AIEngineError("OpenAI response entry had neither 'url' nor 'b64_json'")
 
     async def _post(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -140,8 +143,9 @@ class OpenAIAdapter(AIEngineAdapter):
         entries = data.get("data") or []
         images: list[GeneratedImage] = []
         for i, entry in enumerate(entries):
-            location = await self._download(entry, i)
-            images.append(GeneratedImage(file_path=location, width=w, height=h, seed=None))
+            location, raw, src = await self._resolve(entry, i)
+            images.append(GeneratedImage(file_path=location, width=w, height=h,
+                                         seed=None, data=raw, source_url=src))
         if not images:
             raise AIEngineError("OpenAI API returned no images")
         return images
@@ -162,8 +166,9 @@ class OpenAIAdapter(AIEngineAdapter):
         entries = data.get("data") or []
         images: list[GeneratedImage] = []
         for i, entry in enumerate(entries):
-            location = await self._download(entry, i)
-            images.append(GeneratedImage(file_path=location, width=w, height=h, seed=None))
+            location, raw, src = await self._resolve(entry, i)
+            images.append(GeneratedImage(file_path=location, width=w, height=h,
+                                         seed=None, data=raw, source_url=src))
         if not images:
             raise AIEngineError("OpenAI API returned no images")
         return images

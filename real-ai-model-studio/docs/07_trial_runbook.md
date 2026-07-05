@@ -156,6 +156,54 @@ Settings もしくは `POST /api/v1/users` で作成する。ロール別の権�
 
 ---
 
+## 8. 実AIエンジンの結合確認（本番キー投入）
+
+MVP/仮テストは mock エンジン。実際の画像生成に切り替える手順。**本番APIキーは課金が
+発生する**ため、まず社内のステージング環境と検証用予算で行うこと。キーは絶対にコミット
+しない（`.env` は `.gitignore` 済み）。
+
+### 8.1 キー投入とエンジン切替
+```bash
+# .env に設定（例: OpenAI）
+AI_ENGINE=openai
+AI_ENGINE_API_KEY=sk-...            # Replicate の場合は REPLICATE_API_TOKEN=...
+# 生成画像の保管先も本番想定に（推奨: S3/R2。生画像を暗号化保管）
+STORAGE_PROVIDER=s3                 # or r2 + STORAGE_ENDPOINT_URL / STORAGE_ACCESS_KEY / STORAGE_SECRET_KEY
+```
+DB の `ai_engines` テーブルに対象エンジンを登録し、生成時にそのエンジンを選ぶこともできる
+（`generations.ai_engine_id`）。未指定時は `settings.ai_engine` が使われる。
+
+### 8.2 まず疎通スモーク（DB不要・最小コスト）
+```bash
+cd apps/api
+python scripts/live_ai_smoke.py "a premium beverage on a clean studio background"
+# -> returned N image(s) / SMOKE OK  が出れば、キー・接続・アダプタは正常
+```
+
+### 8.3 opt-in の結合テスト（実課金・既定はskip）
+```bash
+RAMS_LIVE_AI=1 AI_ENGINE=openai AI_ENGINE_API_KEY=sk-... \
+  pytest tests/test_live_ai.py -q
+```
+
+### 8.4 アプリ経由の実生成（本番同等フロー）
+1. 非同期で回す場合は `CELERY_TASK_ALWAYS_EAGER=false` にして Redis と worker を起動
+   （`docker compose up worker` / `celery -A app.workers.celery_app worker -l info`）。
+2. UI で 判定OK/条件付き の案件からプロンプト生成 → ジョブが queued→running→completed。
+3. **確認ポイント（重要）**:
+   - `generation_outputs.file_path` が **自社ストレージのURI**（`s3://...` / `local://...`）に
+     なっていること（プロバイダの一時URLがそのまま保存されていない）。
+   - `generation_outputs.file_hash` が**実画像バイトのSHA-256**であること。
+   - 生画像は `/api/v1/outputs/{id}/download`（承認済のみ・短命署名URL）経由でのみ取得でき、
+     直接URLでは取得できないこと。
+   - 実行直前にワーカーが判定を再検証すること（投入後に判定をNGへ変えると生成されない）。
+4. レビュー→多段承認→納品まで通し、監査ログに generate/approve/deliver/download が残ることを確認。
+
+> プロバイダ側のコンテンツポリシーでも拒否され得る（多層）。ただし**本システムの判定が
+> 一次ゲート**であり、プロバイダ拒否に依存しない設計。
+
+---
+
 ## 7. 事故・逸脱発生時（`legal/02_operation_policy.md §6` 準拠）
 
 許諾範囲外の生成・利用が判明した場合、または本人/事務所から停止要請があった場合：

@@ -66,7 +66,9 @@ pytest                                              # 判定エンジン・承�
 - [x] **実AIエンジンアダプタ**（openai / replicate、注入可能クライアントでテスト）
 - [x] **Storage S3/R2 バックエンド**（boto3・SSE・presigned URL、moto テスト）
 - [x] 契約期限アラート P1-007（`/dashboard/expiring-contracts` + ダッシュボードカード）
-- [ ] 実AIエンジンの本番キー投入・実生成での結合確認（現状はアダプタ実装＋オフラインテストまで）
+- [x] 実生成の保存グルー（アダプタの b64/URL → 自社ストレージへ暗号化保存・実バイトのSHA-256）
+- [x] 実AIエンジン結合の turnkey 化（scripts/live_ai_smoke.py・RAMS_LIVE_AI gated test・runbook §8）
+- [ ] 実AIエンジンの**本番キーでの実生成**（課金発生・利用者/ステージング環境で実施。手順は docs/07 §8）
 - [ ] 本人/事務所 承認ポータル（P2, 外部ログイン設計が必要）
 
 ## Testing
