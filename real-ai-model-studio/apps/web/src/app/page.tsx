@@ -6,18 +6,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import type { ExpiringContract } from "@/types";
 import type { Model, Project } from "@rams/shared-types";
 
 export default function Dashboard() {
   const [models, setModels] = useState<Model[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [expiring, setExpiring] = useState<ExpiringContract[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.listModels(), api.listProjects()])
-      .then(([m, p]) => {
+    Promise.all([api.listModels(), api.listProjects(), api.expiringContracts(30)])
+      .then(([m, p, e]) => {
         setModels(m);
         setProjects(p);
+        setExpiring(e);
       })
       .catch((e) => setError((e as Error).message));
   }, []);
@@ -36,7 +39,7 @@ export default function Dashboard() {
     ["Projects In Progress", inProgress],
     ["Pending Approvals", pendingApprovals],
     ["High Risk Items", highRisk],
-    ["Registered Models", models.length],
+    ["Expiring Contracts", expiring.length],
   ];
 
   return (
@@ -51,6 +54,37 @@ export default function Dashboard() {
             <div className="kpi-value">{value}</div>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <h3>契約期限 (30日以内)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>芸名</th>
+              <th>契約番号</th>
+              <th>終了日</th>
+              <th>残日数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {expiring.map((c) => (
+              <tr key={c.contract_id}>
+                <td>{c.stage_name}</td>
+                <td>{c.contract_number}</td>
+                <td>{c.contract_end}</td>
+                <td>
+                  <span className="badge">{c.days_left}日</span>
+                </td>
+              </tr>
+            ))}
+            {expiring.length === 0 && !error && (
+              <tr>
+                <td colSpan={4} className="muted">該当なし</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="card">

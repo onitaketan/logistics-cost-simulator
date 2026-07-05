@@ -70,6 +70,16 @@ export interface ApprovalResult {
   missing_approvals: ApprovalLevel[];
 }
 
+// GET /dashboard/expiring-contracts — contracts nearing their end date (P1-007)
+export interface ExpiringContract {
+  contract_id: string;
+  model_id: string;
+  stage_name: string;
+  contract_number: string;
+  contract_end: string;
+  days_left: number;
+}
+
 // GET /audit-logs
 export interface AuditLog {
   id: string;

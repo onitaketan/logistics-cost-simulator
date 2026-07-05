@@ -11,22 +11,19 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
-from app.models.generation import AIEngine, ComplianceCheck, Generation, GenerationOutput
+from app.models.generation import ComplianceCheck, Generation, GenerationOutput
 from app.schemas.common import ok
 from app.schemas.dto import GenerationCreate
-from app.services import audit_service, generation_service as gen
-from app.services.ai_engines import get_adapter
-from app.services.storage_service import compute_hash
+from app.services import generation_service as gen
 
 router = APIRouter(tags=["generations"])
 
 
 @router.post("/generations")
-async def create_generation(
+def create_generation(
     body: GenerationCreate,
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.GENERATE))],
@@ -38,13 +35,10 @@ async def create_generation(
             id=str(check.id), project_id=str(check.project_id),
             model_id=str(check.model_id), check_status=check.check_status,
         )
-    # Raises GenerationBlocked if the check is missing / mismatched / not ok|conditional.
-    # Propagates to the app-level handler which returns the consistent 422 envelope.
+    # Request-time gate (checkpoint 1). Raises GenerationBlocked if the check is
+    # missing / mismatched / not ok|conditional; the app-level handler turns that
+    # into the consistent 422 envelope.
     gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
-
-    engine = None
-    if body.ai_engine_id:
-        engine = db.get(AIEngine, body.ai_engine_id)
 
     generation = Generation(
         project_id=body.project_id,
@@ -56,34 +50,22 @@ async def create_generation(
         prompt_template_id=body.prompt_template_id,
         generation_params=body.generation_params,
         output_count=int(body.generation_params.get("output_count", 1)),
-        status="running",
+        status="queued",
         generated_by=user.id,
     )
     db.add(generation)
-    db.flush()
-
-    # Run the adapter (mock in MVP). In production this is dispatched to a queue worker.
-    adapter_key = engine.adapter_key if engine else get_settings().ai_engine
-    adapter = get_adapter(adapter_key)
-    images = await gen.run_generation(adapter, body.prompt_text, body.generation_params)
-    for img in images:
-        db.add(GenerationOutput(
-            generation_id=generation.id,
-            file_path=img.file_path,
-            file_hash=compute_hash(img.file_path.encode()),
-            width=img.width,
-            height=img.height,
-            output_status="candidate",
-        ))
-    generation.status = "completed"
-    db.flush()
-
-    audit_service.record(
-        db, user_id=user.id, action_type="generate", target_type="output",
-        target_id=str(generation.id),
-        after={"compliance_check_id": body.compliance_check_id, "count": len(images)},
-    )
+    # Commit the queued row (DB trigger validates at INSERT — checkpoint 2) BEFORE
+    # enqueuing, so the worker's own session can see it. The worker re-validates
+    # compliance at execution time (checkpoint 3) and produces the outputs.
     db.commit()
+
+    # Dispatch to the queue worker. In eager mode (local/dev/test) this runs the
+    # task inline, so the row already reaches 'completed' before we respond;
+    # refresh() then reflects that terminal state. In async mode it stays 'queued'
+    # and the client polls until the worker finishes.
+    gen.enqueue_generation(generation.id)
+    db.refresh(generation)
+
     return ok({"generation_id": str(generation.id), "status": generation.status})
 
 

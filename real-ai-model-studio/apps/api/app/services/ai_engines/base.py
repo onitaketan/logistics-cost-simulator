@@ -10,6 +10,14 @@ from dataclasses import dataclass
 from typing import Any
 
 
+class AIEngineError(RuntimeError):
+    """Raised when an external AI engine call fails (transport, auth, or API error).
+
+    Upstream (generation_service) turns this into a failed generation. This never
+    means compliance was bypassed — that gate runs before any adapter is invoked.
+    """
+
+
 @dataclass
 class GeneratedImage:
     file_path: str        # path/URI to the stored image

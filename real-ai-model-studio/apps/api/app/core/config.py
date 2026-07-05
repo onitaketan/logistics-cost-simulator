@@ -21,6 +21,22 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://rams:rams@localhost:5432/rams"
     redis_url: str = "redis://localhost:6379/0"
 
+    # Celery / queue worker (docs/06 §5). Broker & result backend default to
+    # redis_url so a single Redis serves both. task_always_eager defaults to True
+    # for local/dev and tests: `.delay()` then runs the task inline in-process,
+    # so no Redis or separate worker is required to reach a terminal state.
+    celery_broker_url: str | None = None
+    celery_result_backend: str | None = None
+    celery_task_always_eager: bool = True
+
+    @property
+    def effective_celery_broker_url(self) -> str:
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def effective_celery_result_backend(self) -> str:
+        return self.celery_result_backend or self.redis_url
+
     storage_provider: str = "local"
     storage_bucket: str = "rams-private"
     storage_endpoint_url: str | None = None

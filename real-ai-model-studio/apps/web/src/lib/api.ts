@@ -14,6 +14,7 @@ import type {
   AuditLog,
   Contract,
   Delivery,
+  ExpiringContract,
   GenerationDetail,
   Output,
   Permission,
@@ -240,6 +241,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  // ---- Dashboard ----
+  expiringContracts: (days?: number) =>
+    request<ExpiringContract[]>(
+      `/dashboard/expiring-contracts${days ? `?days=${days}` : ""}`,
+    ),
 
   // ---- Audit ----
   listAuditLogs: (filters: {

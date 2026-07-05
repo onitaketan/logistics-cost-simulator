@@ -60,9 +60,14 @@ pytest                                              # 判定エンジン・承�
 - [x] API入力バリデーション（Literal enum / 範囲 / 空文字拒否 / 期間整合）＋日本語エラー＋ページング
 - [x] 判定の作り込み（禁止/要注意辞書の拡充・**モデル固有NGルール**統合）＋判定テスト60件
 - [x] デモデータ scripts/seed_demo.py（OK/Conditional/NG/Prohibited を網羅する仮テスト用データ）
-- [ ] Storage: S3/R2（SSE-KMS）バックエンドの結線（interfaceは用意済み・boto3差込）
-- [ ] 生成の非同期化（Celery/Redis ワーカーへ移譲）※**仮テスト後**に実施（API契約変更を伴うため）
-- [ ] 本人/事務所 承認ポータル（P2）
+- [x] CORS ミドルウェア（フロント/バック分離デプロイ）
+- [x] 仮テスト手順書 docs/07_trial_runbook.md + Generation Studio の案件/モデル選択UI
+- [x] **生成の非同期化**（Celery/Redis worker）— eager フォールバック＋**実行時の判定再検証（第3チェックポイント）**
+- [x] **実AIエンジンアダプタ**（openai / replicate、注入可能クライアントでテスト）
+- [x] **Storage S3/R2 バックエンド**（boto3・SSE・presigned URL、moto テスト）
+- [x] 契約期限アラート P1-007（`/dashboard/expiring-contracts` + ダッシュボードカード）
+- [ ] 実AIエンジンの本番キー投入・実生成での結合確認（現状はアダプタ実装＋オフラインテストまで）
+- [ ] 本人/事務所 承認ポータル（P2, 外部ログイン設計が必要）
 
 ## Testing
 
