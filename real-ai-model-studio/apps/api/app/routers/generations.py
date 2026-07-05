@@ -91,7 +91,7 @@ def list_outputs(
         select(GenerationOutput).where(GenerationOutput.generation_id == generation_id)
     ).all()
     return ok([
-        {"id": str(o.id), "file_path": o.file_path, "output_status": o.output_status,
-         "width": o.width, "height": o.height}
+        {"id": str(o.id), "file_path": o.file_path, "file_hash": o.file_hash,
+         "output_status": o.output_status, "width": o.width, "height": o.height}
         for o in rows
     ])

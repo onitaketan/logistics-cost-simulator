@@ -199,6 +199,20 @@ RAMS_LIVE_AI=1 AI_ENGINE=openai AI_ENGINE_API_KEY=sk-... \
    - 実行直前にワーカーが判定を再検証すること（投入後に判定をNGへ変えると生成されない）。
 4. レビュー→多段承認→納品まで通し、監査ログに generate/approve/deliver/download が残ることを確認。
 
+### 8.5 ワンコマンド受け入れテスト（推奨・実デプロイAPIに対して）
+デプロイ済みAPI（`AI_ENGINE` が実プロバイダを指す）に対し、全経路を自動検証する。
+プロバイダの出力バイトを事前に知らなくても、**署名DLで取得したバイトのSHA-256が
+`file_hash` と一致し、実画像であること**まで確認する（成人未確認モデルのブロックも検証）。
+```bash
+cd apps/api
+export RAMS_API_BASE=http://<api-host>:8000/api/v1
+export RAMS_ADMIN_EMAIL=admin@example.com RAMS_ADMIN_PASSWORD='***'
+python scripts/verify_live_generation.py
+# -> LIVE GENERATION VERIFICATION: PASS （exit 0）
+```
+この環境（開発）では擬似プロバイダを使い本スクリプトの正当性を確認済み。ステージングでは
+`AI_ENGINE=openai` + 実キー + egress 許可のもとで同じコマンドを実行するだけ。
+
 > プロバイダ側のコンテンツポリシーでも拒否され得る（多層）。ただし**本システムの判定が
 > 一次ゲート**であり、プロバイダ拒否に依存しない設計。
 
