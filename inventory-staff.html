@@ -67,6 +67,9 @@ h1{font-size:19px;font-weight:700}
 .searchbar{position:relative;margin-bottom:10px}
 .searchbar .mag{position:absolute;left:14px;top:50%;transform:translateY(-50%);font-size:18px;color:var(--ink3)}
 .searchbar input{padding-left:44px}
+.catrow{display:flex;gap:8px;margin-bottom:10px}
+.catrow select{flex:1;min-width:0;font-size:15px;padding:11px 12px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--card);color:var(--ink);font-family:var(--sans);cursor:pointer}
+.item-cat{display:inline-block;font-size:11.5px;background:#e7efe9;color:var(--good);padding:2px 9px;border-radius:20px;margin-top:5px;font-weight:600}
 .picklist{max-height:46vh;overflow-y:auto;border:1px solid var(--line);border-radius:var(--r-sm)}
 .pick{display:flex;align-items:center;gap:10px;padding:12px 13px;border-bottom:1px solid var(--line);cursor:pointer;background:var(--card)}
 .pick:last-child{border-bottom:none}
@@ -167,6 +170,7 @@ input:focus{border-color:var(--akb)}
     --ink:#e9efec;--ink2:#b6c2bc;--ink3:#8ea099;
   }
   .tab.active,.store-pill.on{background:#127a5b;border-color:#127a5b;color:#fff}
+  .item-cat{background:rgba(84,196,147,.16);color:#90e0bb}
   .conn.ok{background:rgba(84,196,147,.16);color:#77dcae}
   .conn.bad{background:rgba(240,137,122,.16);color:#f2a99b}
   .msg.new{background:rgba(227,171,92,.16);color:#e8bd7c}
@@ -213,20 +217,21 @@ input:focus{border-color:var(--akb)}
     <!-- 商品をタップで選ぶ -->
     <div class="panel">
       <span class="label">🗂 商品をタップで選ぶ</span>
-      <div class="searchbar"><span class="mag">🔍</span><input type="search" id="pickSearch" placeholder="絞り込み（タイトル・機種）…" autocomplete="off"></div>
+      <div class="catrow"><select id="pickCat1"></select><select id="pickCat2"></select></div>
+      <div class="searchbar"><span class="mag">🔍</span><input type="search" id="pickSearch" placeholder="絞り込み（タイトル・機種・店内コード）…" autocomplete="off"></div>
       <div class="picklist" id="pickList"></div>
       <div class="divider">スキャン / 手入力でもOK</div>
       <button class="btn scan" id="scanBtn">📷 バーコードを読み取る</button>
       <div class="btn-row hide" id="scanStopRow"><button class="btn ghost" id="scanStop">⏹ カメラを止める</button></div>
       <div id="reader"></div>
-      <input type="text" class="jan" id="janInput" inputmode="numeric" placeholder="バーコード番号を手入力" style="margin-top:10px">
+      <input type="text" class="jan" id="janInput" placeholder="バーコード / 店内コードを手入力" style="margin-top:10px">
     </div>
   </section>
 
   <!-- FIND -->
   <section id="tab-find" class="hide">
     <div class="searchbar"><span class="mag">🔍</span>
-      <input type="search" id="findInput" placeholder="タイトル・機種名・JANで検索…" autocomplete="off"></div>
+      <input type="search" id="findInput" placeholder="タイトル・機種・JAN・店内コードで検索…" autocomplete="off"></div>
     <div id="findResults"></div>
   </section>
 
@@ -271,7 +276,15 @@ function storeName(id){const s=STORES.find(x=>x.id===id);return s?s.name:"?";}
 function qtyAt(pid,sid){return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].qty)||0;}
 function shelfAt(pid,sid){return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].shelf)||"";}
 function productByJan(j){return PRODUCTS.find(p=>p.jan===j);}
+function productByCode(c){c=(c||"").trim();return c?PRODUCTS.find(p=>(p.internal_code||"")===c):null;}
+function findProduct(v){return productByJan((v||"").trim())||productByCode(v);}
 function productById(id){return PRODUCTS.find(p=>p.id===id);}
+function catList1(){return [...new Set(PRODUCTS.map(p=>(p.cat1||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));}
+function catList2(c1){return [...new Set(PRODUCTS.filter(p=>!c1||(p.cat1||"")===c1).map(p=>(p.cat2||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja"));}
+function fillSelect(el,arr,cur,allLabel){ if(!el)return; const keep=arr.includes(cur)?cur:"";
+  el.innerHTML=`<option value="">${esc(allLabel)}</option>`+arr.map(v=>`<option value="${esc(v)}"${v===keep?" selected":""}>${esc(v)}</option>`).join(""); el.value=keep; }
+function fillPickCats(){ const s1=$("#pickCat1"),s2=$("#pickCat2"); if(!s1)return;
+  fillSelect(s1,catList1(),s1.value||"","すべての大分類"); fillSelect(s2,catList2(s1.value||""),(s2||{}).value||"","すべての小分類"); }
 function curStoreId(){ let c=localStorage.getItem("inv_staff_store"); if(!STORES.find(s=>s.id===c)) c=STORES[0]&&STORES[0].id; return c; }
 
 let toastT;
@@ -299,7 +312,7 @@ async function loadAll(){
     RECENT=(rc&&!rc.error&&rc.data)?rc.data:[];
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{(STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf};});
-    setConn(true); renderStores(); renderTop(); renderPick(); renderFind(); renderRepStores(); renderRecent();
+    setConn(true); renderStores(); renderTop(); fillPickCats(); renderPick(); renderFind(); renderRepStores(); renderRecent();
     if(selJan) showProduct(selJan,true);
     if(!$("#tab-report").classList.contains("hide")) loadReport();
     return true;
@@ -349,24 +362,31 @@ function renderRecent(){
 /* タップで選ぶ 全商品リスト */
 function renderPick(){
   const q=($("#pickSearch").value||"").trim().toLowerCase(); const el=$("#pickList"); const sid=curStoreId();
+  const c1=($("#pickCat1")||{}).value||"", c2=($("#pickCat2")||{}).value||"";
   let list=PRODUCTS.slice();
-  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  if(c1) list=list.filter(p=>(p.cat1||"")===c1);
+  if(c2) list=list.filter(p=>(p.cat2||"")===c2);
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q)||(p.internal_code||"").toLowerCase().includes(q)||(p.cat1||"").toLowerCase().includes(q)||(p.cat2||"").toLowerCase().includes(q));
   list.sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
-  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">📦</div>${q?"見つかりません":"商品がありません（店長が入荷登録すると出ます）"}</div>`; return; }
+  if(!list.length){ el.innerHTML=`<div class="empty"><div class="big">📦</div>${(q||c1||c2)?"見つかりません":"商品がありません（店長が入荷登録すると出ます）"}</div>`; return; }
   el.innerHTML="";
   list.slice(0,300).forEach(p=>{ const qy=qtyAt(p.id,sid);
+    const cat=[p.cat1,p.cat2].map(x=>(x||"").trim()).filter(Boolean).join(" › ");
+    const sub=[cat,p.model,p.internal_code?"店内 "+p.internal_code:"",p.jan].filter(Boolean).join(" ／ ");
     const d=document.createElement("div"); d.className="pick";
-    d.innerHTML=`<span class="pn">${esc(p.name)}<small>${p.model?esc(p.model)+" ／ ":""}${esc(p.jan)}</small></span>
+    d.innerHTML=`<span class="pn">${esc(p.name)}<small>${esc(sub)}</small></span>
       <span class="pq ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy}点</span>`;
     d.onclick=()=>selectProduct(p.jan); el.appendChild(d);
   });
 }
 $("#pickSearch").addEventListener("input",renderPick);
+$("#pickCat1").addEventListener("change",()=>{ fillPickCats(); renderPick(); });
+$("#pickCat2").addEventListener("change",renderPick);
 
 /* 商品選択 → 売るパネル表示 */
 function selectProduct(jan){ selJan=jan; showProduct(jan); const p=$("#sellPanel");
   p.scrollIntoView({behavior:"smooth",block:"start"}); }
-function onJan(j){ j=(j||"").trim(); $("#janInput").value=""; if(j) selectProduct(j); }
+function onJan(j){ j=(j||"").trim(); $("#janInput").value=""; if(!j) return; const p=findProduct(j); selectProduct(p?p.jan:j); }
 function showProduct(jan,keepScroll){
   jan=(jan||"").trim(); const panel=$("#sellPanel"); const box=$("#result"); const p=productByJan(jan);
   if(!jan||!p){ if(!p&&jan){ panel.classList.remove("hide"); box.innerHTML=`<div class="msg new">この商品（JAN ${esc(jan)}）は未登録です。店長に入荷登録をお願いしてください。</div>`; } else panel.classList.add("hide"); return; }
@@ -375,7 +395,7 @@ function showProduct(jan,keepScroll){
   const sid=curStoreId(); const qy=qtyAt(p.id,sid);
   box.innerHTML=`
     <div class="rname">${esc(p.name)}</div>
-    <div class="rmeta">${p.model?esc(p.model)+" ／ ":""}JAN ${esc(p.jan)}</div>
+    <div class="rmeta">${p.model?esc(p.model)+" ／ ":""}JAN ${esc(p.jan)}${p.internal_code?" ／ 店内 "+esc(p.internal_code):""}</div>
     <div class="qtybox"><span class="lab">${esc(storeName(sid))}の在庫</span><span class="cur ${qy<0?'neg':''}">${qy}</span><span class="lab">点</span></div>
     <span class="label">売れた数</span>
     <div class="qstep"><button id="qMinus">−</button><span class="qv" id="qv">${sellQty}</span><button id="qPlus">＋</button></div>
@@ -411,15 +431,16 @@ $("#janInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefa
 function renderFind(){
   const q=($("#findInput").value||"").trim().toLowerCase(); const box=$("#findResults"); box.innerHTML="";
   let list=PRODUCTS.slice();
-  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q)||(p.internal_code||"").toLowerCase().includes(q)||(p.cat1||"").toLowerCase().includes(q)||(p.cat2||"").toLowerCase().includes(q));
   list.sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
   if(!list.length){ box.innerHTML=`<div class="empty"><div class="big">📦</div>${q?"見つかりませんでした":"商品がまだありません"}</div>`; return; }
   list.slice(0,120).forEach(p=>{
     let rows=""; STORES.forEach(s=>{const qy=qtyAt(p.id,s.id),sh=shelfAt(p.id,s.id);
       rows+=`<div class="srow"><span class="sdot" style="background:${esc(s.color)}"></span><span class="sname">${esc(s.name)}</span>
         <span class="sqty ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy} 点</span><span class="sshelf">${sh?'📍 '+esc(sh):''}</span></div>`;});
+    const cat=[p.cat1,p.cat2].map(x=>(x||"").trim()).filter(Boolean).join(" › ");
     const d=document.createElement("div"); d.className="item";
-    d.innerHTML=`<div class="item-name">${esc(p.name)}</div><div class="item-meta">${p.model?esc(p.model)+" ／ ":""}JAN ${esc(p.jan)}</div>${rows}`;
+    d.innerHTML=`<div class="item-name">${esc(p.name)}</div><div class="item-meta">${p.model?esc(p.model)+" ／ ":""}JAN ${esc(p.jan)}${p.internal_code?" ／ 店内 "+esc(p.internal_code):""}</div>${cat?`<span class="item-cat">${esc(cat)}</span>`:""}${rows}`;
     box.appendChild(d);
   });
 }

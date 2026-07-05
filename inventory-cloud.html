@@ -93,6 +93,10 @@ input:focus,select:focus{border-color:var(--akb);box-shadow:0 0 0 3px rgba(40,95
 
 .searchbar{position:relative;margin-bottom:14px}
 .searchbar input{padding-left:40px;font-size:16px}
+.catrow{display:flex;gap:8px;margin-bottom:10px}
+.catrow select{flex:1;min-width:0;font-size:14px;padding:10px 12px;border:1.5px solid var(--line2);border-radius:var(--r-sm);background:var(--card);color:var(--ink);font-family:var(--sans);cursor:pointer}
+.il-note{font-weight:400;color:var(--ink3);font-size:11px}
+.item-cat{display:inline-block;font-size:11.5px;background:#e7efe9;color:var(--good);padding:2px 9px;border-radius:20px;margin-top:5px;margin-right:5px;font-weight:600}
 .searchbar .mag{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--ink3);font-size:17px}
 .item{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:1rem 1.1rem;margin-bottom:10px}
 .item.zero{opacity:.62}
@@ -183,6 +187,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
   /* --ink を背景に使う選択状態は反転して見えなくなるため緑アクセントに */
   .tab.active,.btn.primary,.store-pill.on{background:#127a5b;border-color:#127a5b;color:#fff}
   .btn.primary:hover{background:#0f6b50}
+  .item-cat{background:rgba(84,196,147,.16);color:#90e0bb}
   .conn.ok,.jan-badge.known{background:rgba(84,196,147,.16);color:#77dcae}
   .conn.bad{background:rgba(240,137,122,.16);color:#f2a99b}
   .jan-badge.newp{background:rgba(227,171,92,.16);color:#e8bd7c}
@@ -257,7 +262,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
     <div class="panel">
       <div class="p-title">③ よく売れる商品／一覧から選ぶ</div>
       <div class="sellchips hide" id="sellTop"></div>
-      <div class="searchbar"><span class="mag">🔍</span><input type="search" id="sellPick" placeholder="タイトル・機種名で絞り込み…" autocomplete="off"></div>
+      <div class="catrow"><select id="sellCat1"></select><select id="sellCat2"></select></div>
+      <div class="searchbar"><span class="mag">🔍</span><input type="search" id="sellPick" placeholder="タイトル・機種・店内コードで絞り込み…" autocomplete="off"></div>
       <div class="picklist" id="sellPickList"></div>
     </div>
   </section>
@@ -288,9 +294,15 @@ a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,.t
         <div class="ig"><label class="il">棚番号・保管場所</label><input type="text" id="recShelf" placeholder="例：A-12 / ガラスケース3段目"></div>
       </div>
       <div class="grid2">
-        <div class="ig"><label class="il">メモ（状態など）</label><input type="text" id="recNote" placeholder="例：美品 / 箱説あり"></div>
-        <div class="ig"><label class="il">入荷する数量</label><input type="number" id="recQty" value="1" min="1" step="1"></div>
+        <div class="ig"><label class="il">大分類（枝分けの親）</label><input type="text" id="recCat1" list="dlCat1" placeholder="例：ゲーム / 本 / おもちゃ" autocomplete="off"></div>
+        <div class="ig"><label class="il">小分類（枝分けの子）</label><input type="text" id="recCat2" list="dlCat2" placeholder="例：ファミコン / 漫画" autocomplete="off"></div>
       </div>
+      <div class="grid2">
+        <div class="ig"><label class="il">店内識別コード <span class="il-note">JANとは別・任意</span></label><input type="text" id="recCode" placeholder="例：A0123 / 手書きシール番号" autocomplete="off"></div>
+        <div class="ig"><label class="il">メモ（状態など）</label><input type="text" id="recNote" placeholder="例：美品 / 箱説あり"></div>
+      </div>
+      <div class="ig"><label class="il">入荷する数量</label><input type="number" id="recQty" value="1" min="1" step="1"></div>
+      <datalist id="dlCat1"></datalist><datalist id="dlCat2"></datalist>
       <button class="btn primary big wide" id="recSubmit">この店舗に入荷登録</button>
     </div>
   </section>
@@ -417,6 +429,17 @@ function qtyAt(pid,sid){ return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].qt
 function shelfAt(pid,sid){ return (STOCK[sid]&&STOCK[sid][pid]&&STOCK[sid][pid].shelf)||""; }
 function totalOf(pid){ return STORES.reduce((a,s)=>a+qtyAt(pid,s.id),0); }
 function productByJan(j){ return PRODUCTS.find(p=>p.jan===j); }
+function productByCode(c){ c=(c||"").trim(); return c?PRODUCTS.find(p=>(p.internal_code||"")===c):null; }
+function findProduct(v){ return productByJan((v||"").trim())||productByCode(v); }
+/* 分類（枝）: 大分類→小分類 */
+function catList1(){ return [...new Set(PRODUCTS.map(p=>(p.cat1||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja")); }
+function catList2(c1){ return [...new Set(PRODUCTS.filter(p=>!c1||(p.cat1||"")===c1).map(p=>(p.cat2||"").trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"ja")); }
+function fillDatalist(id,arr){ const el=$(id); if(!el)return; el.innerHTML=arr.map(v=>`<option value="${esc(v)}">`).join(""); }
+function fillSelect(el,arr,cur,allLabel){ if(!el)return; const keep=arr.includes(cur)?cur:"";
+  el.innerHTML=`<option value="">${esc(allLabel)}</option>`+arr.map(v=>`<option value="${esc(v)}"${v===keep?" selected":""}>${esc(v)}</option>`).join(""); el.value=keep; }
+function fillRecCats(){ fillDatalist("#dlCat1",catList1()); fillDatalist("#dlCat2",catList2(($("#recCat1")||{}).value||"")); }
+function fillSellCats(){ const s1=$("#sellCat1"),s2=$("#sellCat2"); if(!s1)return;
+  const c1=s1.value||""; fillSelect(s1,catList1(),c1,"すべての大分類"); fillSelect(s2,catList2(s1.value||""),(s2||{}).value||"","すべての小分類"); }
 
 /* ============================================================
    データ読み込み
@@ -434,7 +457,7 @@ async function loadAll(){
     STOCK={}; STORES.forEach(s=>STOCK[s.id]={});
     (sk.data||[]).forEach(r=>{ (STOCK[r.store_id]=STOCK[r.store_id]||{})[r.product_id]={qty:r.qty,shelf:r.shelf}; });
     setConn(true);
-    renderHero(); renderSearch(); renderStorePills(); renderSellTop(); renderSellPick();
+    renderHero(); renderSearch(); renderStorePills(); renderSellTop(); fillRecCats(); fillSellCats(); renderSellPick();
     // 移動/設定タブは編集中の入力を消さないよう、非表示のときだけ再描画（表示中はタブ切替時に描画）
     if($("#tab-move").classList.contains("hide")) renderMoveSelects();
     if($("#tab-settings").classList.contains("hide")) renderSettings();
@@ -464,7 +487,7 @@ function renderSearch(){
   const q=($("#searchInput").value||"").trim().toLowerCase();
   const box=$("#searchResults"); box.innerHTML="";
   let list=PRODUCTS.slice();
-  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.note||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.note||"").toLowerCase().includes(q)||(p.jan||"").includes(q)||(p.internal_code||"").toLowerCase().includes(q)||(p.cat1||"").toLowerCase().includes(q)||(p.cat2||"").toLowerCase().includes(q));
   list.sort((a,b)=>totalOf(b.id)-totalOf(a.id)||(a.name||"").localeCompare(b.name||"","ja"));
   if(!list.length){ box.innerHTML=`<div class="empty"><div class="big">📦</div>${q?"該当する商品が見つかりません。":"まだ商品が登録されていません。店長が「入荷」から登録してください。"}</div>`; return; }
   list.forEach(p=>{
@@ -474,9 +497,10 @@ function renderSearch(){
       rows+=`<div class="srow"><span class="sdot" style="background:${esc(s.color)}"></span><span class="sname">${esc(s.name)}</span>
         <span class="sqty ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy} 点</span><span class="sshelf">${sh?'📍 '+esc(sh):''}</span></div>`; });
     const d=document.createElement("div"); d.className="item"+(total<=0?" zero":"")+(neg?" neg":"");
+    const cat=[p.cat1,p.cat2].map(x=>(x||"").trim()).filter(Boolean).join(" › ");
     d.innerHTML=`<div class="item-head"><div>
-        <div class="item-name">${esc(p.name)}</div><div class="item-meta">JAN: ${esc(p.jan)}</div>
-        ${p.model?`<span class="item-model">${esc(p.model)}</span>`:""}${p.note?`<span class="item-model">${esc(p.note)}</span>`:""}
+        <div class="item-name">${esc(p.name)}</div><div class="item-meta">JAN: ${esc(p.jan)}${p.internal_code?' ／ 店内 '+esc(p.internal_code):''}</div>
+        ${cat?`<span class="item-cat">${esc(cat)}</span>`:""}${p.model?`<span class="item-model">${esc(p.model)}</span>`:""}${p.note?`<span class="item-model">${esc(p.note)}</span>`:""}
       </div><div class="item-total">計 ${total}<small> 点</small></div></div><div class="stock-rows">${rows}</div>`;
     box.appendChild(d);
   });
@@ -506,9 +530,9 @@ function sellStoreId(){ return curStore("inv_sell_store", STORES[0]&&STORES[0].i
 function refreshSellTarget(){ onSellJan($("#sellJan").value); }
 function onSellJan(jan){
   jan=(jan||"").trim(); $("#sellJan").value=jan;
-  const box=$("#sellTarget"); const p=productByJan(jan);
+  const box=$("#sellTarget"); const p=findProduct(jan);
   if(!jan){ box.innerHTML=""; return; }
-  if(!p){ box.innerHTML=`<div class="jan-badge newp">未登録の商品です。店長が「入荷」から登録してください。</div>`; return; }
+  if(!p){ box.innerHTML=`<div class="jan-badge newp">未登録の商品です（JAN／店内コードとも一致なし）。店長が「入荷」から登録してください。</div>`; return; }
   const sid=sellStoreId(); const qy=qtyAt(p.id,sid);
   box.innerHTML=`<div class="jan-badge known">✓ ${esc(p.name)}</div>
     <div class="preview" style="margin-bottom:12px">${esc(storeName(sid))} の在庫： <b class="${qy<0?'':''}">${qy}</b> 点${p.model?' ／ '+esc(p.model):''}</div>
@@ -520,20 +544,27 @@ function onSellJan(jan){
 function renderSellPick(){
   const el=$("#sellPickList"); if(!el) return;
   const q=($("#sellPick").value||"").trim().toLowerCase(); const sid=sellStoreId();
+  const c1=($("#sellCat1")||{}).value||"", c2=($("#sellCat2")||{}).value||"";
   let list=PRODUCTS.slice();
-  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q));
+  if(c1) list=list.filter(p=>(p.cat1||"")===c1);
+  if(c2) list=list.filter(p=>(p.cat2||"")===c2);
+  if(q) list=list.filter(p=>(p.name||"").toLowerCase().includes(q)||(p.model||"").toLowerCase().includes(q)||(p.jan||"").includes(q)||(p.internal_code||"").toLowerCase().includes(q)||(p.cat1||"").toLowerCase().includes(q)||(p.cat2||"").toLowerCase().includes(q));
   list.sort((a,b)=>(a.name||"").localeCompare(b.name||"","ja"));
-  if(!list.length){ el.innerHTML=`<div class="empty" style="padding:1.4rem"><div class="big">📦</div>${q?"見つかりません":"商品がありません（「入荷」から登録してください）"}</div>`; return; }
+  if(!list.length){ el.innerHTML=`<div class="empty" style="padding:1.4rem"><div class="big">📦</div>${(q||c1||c2)?"見つかりません":"商品がありません（「入荷」から登録してください）"}</div>`; return; }
   el.innerHTML="";
   list.slice(0,300).forEach(p=>{ const qy=qtyAt(p.id,sid);
+    const cat=[p.cat1,p.cat2].map(x=>(x||"").trim()).filter(Boolean).join(" › ");
+    const sub=[cat,p.model,p.internal_code?"店内 "+p.internal_code:"",p.jan].filter(Boolean).join(" ／ ");
     const d=document.createElement("div"); d.className="pick";
-    d.innerHTML=`<span class="pn">${esc(p.name)}<small>${p.model?esc(p.model)+" ／ ":""}${esc(p.jan)}</small></span>
+    d.innerHTML=`<span class="pn">${esc(p.name)}<small>${esc(sub)}</small></span>
       <span class="pq ${qy===0?'zero':''} ${qy<0?'neg':''}">${qy}点</span>`;
     d.onclick=()=>{ $("#sellJan").value=p.jan; onSellJan(p.jan); const t=$("#sellTarget"); if(t) t.scrollIntoView({behavior:"smooth",block:"center"}); };
     el.appendChild(d);
   });
 }
 $("#sellPick")&&$("#sellPick").addEventListener("input",renderSellPick);
+$("#sellCat1")&&$("#sellCat1").addEventListener("change",()=>{ fillSellCats(); renderSellPick(); });
+$("#sellCat2")&&$("#sellCat2").addEventListener("change",renderSellPick);
 /* よく売れる商品（売れ筋トップ）をワンタップ選択 */
 function renderSellTop(){
   const el=$("#sellTop"); if(!el) return; const sid=sellStoreId();
@@ -580,6 +611,7 @@ function onRecJan(jan){
   if(p){ b.className="jan-badge known"; b.innerHTML="✓ 登録済み商品：自動入力しました";
     $("#recName").value=p.name||""; $("#recModel").value=p.model||""; $("#recNote").value=p.note||"";
     $("#recShelf").value=shelfAt(p.id,recStoreId())||"";
+    $("#recCat1").value=p.cat1||""; $("#recCat2").value=p.cat2||""; $("#recCode").value=p.internal_code||""; fillRecCats();
   }else{ b.className="jan-badge newp"; b.innerHTML="＋ 新規商品：商品名を入力してください"; $("#recName").focus(); }
 }
 $("#recJan").addEventListener("change",e=>onRecJan(e.target.value));
@@ -593,12 +625,13 @@ $("#recSubmit").addEventListener("click",async()=>{
   $("#recSubmit").disabled=true;
   const {data,error}=await sb.rpc("inv_receive",{p_pin:MPIN,p_store:recStoreId(),p_jan:jan,p_name:name,
     p_model:($("#recModel").value||"").trim(),p_note:($("#recNote").value||"").trim(),p_qty:qty,
-    p_shelf:($("#recShelf").value||"").trim(),p_actor:actor()});
+    p_shelf:($("#recShelf").value||"").trim(),p_actor:actor(),
+    p_cat1:($("#recCat1").value||"").trim(),p_cat2:($("#recCat2").value||"").trim(),p_code:($("#recCode").value||"").trim()});
   $("#recSubmit").disabled=false;
   if(error){ toast(errMsg(error),"err"); return; }
   await loadAll();
   toast(`${storeName(recStoreId())}に「${name}」+${qty} → ${data.qty_after} 点`,"ok");
-  $("#recJan").value="";$("#recName").value="";$("#recModel").value="";$("#recNote").value="";$("#recShelf").value="";$("#recQty").value="1";$("#recBadge").innerHTML="";
+  $("#recJan").value="";$("#recName").value="";$("#recModel").value="";$("#recNote").value="";$("#recShelf").value="";$("#recCat1").value="";$("#recCat2").value="";$("#recCode").value="";$("#recQty").value="1";$("#recBadge").innerHTML="";
 });
 
 /* ============================================================
