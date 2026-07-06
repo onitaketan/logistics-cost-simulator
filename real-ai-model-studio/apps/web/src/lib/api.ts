@@ -21,6 +21,7 @@ import type {
   GenerationSummary,
   Output,
   Permission,
+  PromptTemplate,
   ReviewItem,
   User,
 } from "@/types";
@@ -94,6 +95,15 @@ export interface CreateGenerationPayload {
   prompt_text: string;
   negative_prompt_text?: string;
   generation_params: GenerationParams;
+  prompt_template_id?: string;
+}
+
+export interface PromptTemplatePayload {
+  name?: string;
+  body?: string;
+  negative_body?: string;
+  tags?: string[];
+  is_active?: boolean;
 }
 
 export interface CreateDeliveryPayload {
@@ -345,4 +355,33 @@ export const api = {
     if (!res.ok) throw new Error(`CSVエクスポートに失敗しました (${res.status})`);
     return res.blob();
   },
+
+  // ---- Prompt templates (P1-004) ----
+  listPromptTemplates: (activeOnly?: boolean) => {
+    const q = new URLSearchParams();
+    if (activeOnly) q.set("active_only", "true");
+    const qs = q.toString();
+    return request<PromptTemplate[]>(`/prompt-templates${qs ? `?${qs}` : ""}`);
+  },
+  getPromptTemplate: (id: string) =>
+    request<PromptTemplate>(`/prompt-templates/${id}`),
+  createPromptTemplate: (payload: {
+    name: string;
+    body: string;
+    negative_body?: string;
+    tags?: string[];
+  }) =>
+    request<PromptTemplate>("/prompt-templates", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updatePromptTemplate: (id: string, payload: PromptTemplatePayload) =>
+    request<PromptTemplate>(`/prompt-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deletePromptTemplate: (id: string) =>
+    request<{ id: string; disabled: boolean }>(`/prompt-templates/${id}`, {
+      method: "DELETE",
+    }),
 };

@@ -28,6 +28,7 @@ from app.routers import (
     models,
     outputs,
     projects,
+    prompt_templates,
     users,
 )
 from app.services.generation_service import GenerationBlocked
@@ -59,6 +60,7 @@ for r in (
     projects.router,
     compliance.router,
     generations.router,
+    prompt_templates.router,
     outputs.router,
     deliveries.router,
     files.router,

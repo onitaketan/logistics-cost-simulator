@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, resolveFileUrl } from "@/lib/api";
 import type { ComplianceResult, Model, Project } from "@rams/shared-types";
-import type { Output } from "@/types";
+import type { Output, PromptTemplate } from "@/types";
 
 export default function GenerationStudio() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -19,12 +19,27 @@ export default function GenerationStudio() {
   const [prompt, setPrompt] = useState("");
   const [negative, setNegative] = useState("");
   const [check, setCheck] = useState<ComplianceResult | null>(null);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [templateId, setTemplateId] = useState("");
 
-  // Populate project/model pickers so testers never paste raw UUIDs.
+  // Populate project/model pickers so testers never paste raw UUIDs, and load the
+  // active prompt templates for the picker (P1-004).
   useEffect(() => {
     api.listProjects().then(setProjects).catch(() => setProjects([]));
     api.listModels().then(setModels).catch(() => setModels([]));
+    api.listPromptTemplates(true).then(setTemplates).catch(() => setTemplates([]));
   }, []);
+
+  // Choosing a template fills the prompt (and negative prompt) fields and records
+  // which template was used so the backend can attribute the generation to it.
+  function pickTemplate(id: string) {
+    setTemplateId(id);
+    if (!id) return;
+    const t = templates.find((x) => x.id === id);
+    if (!t) return;
+    setPrompt(t.body);
+    setNegative(t.negative_body ?? "");
+  }
 
   const [genId, setGenId] = useState<string | null>(null);
   const [genStatus, setGenStatus] = useState<string | null>(null);
@@ -87,6 +102,7 @@ export default function GenerationStudio() {
         prompt_text: prompt,
         negative_prompt_text: negative || undefined,
         generation_params: { output_count: 4, width: 1024, height: 1280 },
+        prompt_template_id: templateId || undefined,
       });
       setGenId(res.generation_id);
       setGenStatus(res.status);
@@ -122,6 +138,13 @@ export default function GenerationStudio() {
               ))}
             </select>
           </div>
+          <select value={templateId} style={{ padding: 8, width: "100%", marginTop: 8 }}
+            onChange={(e) => pickTemplate(e.target.value)}>
+            <option value="">テンプレート（任意）</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
           <textarea placeholder="プロンプト（許諾範囲内の広告表現）" value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             style={{ width: "100%", padding: 8, minHeight: 90, marginTop: 8 }} />

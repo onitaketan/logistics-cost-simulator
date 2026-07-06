@@ -161,5 +161,16 @@ export interface ApprovalItem {
   approved_at: string | null;
 }
 
+// GET /prompt-templates — reusable prompt templates (P1-004)
+export interface PromptTemplate {
+  id: string;
+  name: string;
+  body: string;
+  negative_body: string | null;
+  tags: string[];
+  is_active: boolean;
+  created_at: string;
+}
+
 // Re-export commonly used unions for screen code convenience.
 export type { ComplianceStatus, OutputStatus, RiskLevel, ApprovalLevel, Role };

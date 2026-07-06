@@ -222,6 +222,28 @@ class GenerationCreate(BaseModel):
     _v_prompt = field_validator("prompt_text")(_reject_blank)
 
 
+# ---- Prompt templates (P1-004) ----
+class PromptTemplateCreate(BaseModel):
+    name: str = Field(min_length=1)
+    body: str = Field(min_length=1)
+    negative_body: str | None = None
+    tags: list[str] = []
+
+    _v_name = field_validator("name")(_reject_blank)
+    _v_body = field_validator("body")(_reject_blank)
+
+
+class PromptTemplateUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    body: str | None = Field(default=None, min_length=1)
+    negative_body: str | None = None
+    tags: list[str] | None = None
+    is_active: bool | None = None
+
+    _v_name = field_validator("name")(_reject_blank)
+    _v_body = field_validator("body")(_reject_blank)
+
+
 class OutputStatusUpdate(BaseModel):
     # Selection statuses ONLY. 'approved' can be reached solely through the
     # approval-completeness gate (POST /outputs/{id}/approvals) and 'delivered'
