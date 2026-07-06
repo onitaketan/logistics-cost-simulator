@@ -221,7 +221,7 @@ def test_delivery_rejects_output_from_other_project(client, auth):
         "delivery_method": "download_link",
     })
     assert r.status_code == 422, r.text
-    assert "案件" in r.json()["detail"]
+    assert "案件" in r.json()["error"]["message"]
 
 
 @db_only
@@ -241,7 +241,7 @@ def test_permission_rejects_contract_of_other_model(client, auth):
         "contract_id": str(cid), "media_scope": ["web"],
     })
     assert r.status_code == 400, r.text
-    assert "モデル" in r.json()["detail"]
+    assert "モデル" in r.json()["error"]["message"]
 
 
 @db_only

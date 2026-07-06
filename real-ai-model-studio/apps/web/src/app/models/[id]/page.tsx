@@ -115,6 +115,7 @@ export default function ModelDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   const loadModel = useCallback(() => {
     api.getModel(id).then(setModel).catch((e) => setError((e as Error).message));
@@ -194,20 +195,33 @@ export default function ModelDetailPage() {
       </div>
 
       {tab === "overview" && (
-        <div className="card">
-          <p>芸名: {model.stage_name}</p>
-          <p>事務所: {model.agency_name ?? "—"}</p>
-          <p>生年月日: {model.birth_date ?? "—"}</p>
-          <p>
-            成人確認:{" "}
-            {model.adult_verified ? (
-              <span className="badge ok">確認済</span>
-            ) : (
-              <span className="badge ng">未確認</span>
-            )}
-          </p>
-          <p>状態: {model.status}</p>
-        </div>
+        editing ? (
+          <ModelEditForm
+            model={model}
+            onDone={() => { setEditing(false); loadModel(); flash("モデル情報を更新しました。"); }}
+            onCancel={() => setEditing(false)}
+            onError={setError}
+          />
+        ) : (
+          <div className="card">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0 }}>概要</h3>
+              <button className="ghost small" onClick={() => setEditing(true)}>編集</button>
+            </div>
+            <p>芸名: {model.stage_name}</p>
+            <p>事務所: {model.agency_name ?? "—"}</p>
+            <p>生年月日: {model.birth_date ?? "—"}</p>
+            <p>
+              成人確認:{" "}
+              {model.adult_verified ? (
+                <span className="badge ok">確認済</span>
+              ) : (
+                <span className="badge ng">未確認</span>
+              )}
+            </p>
+            <p>状態: {model.status}</p>
+          </div>
+        )
       )}
 
       {tab === "contract" && (
@@ -317,7 +331,7 @@ export default function ModelDetailPage() {
             <h3>素材</h3>
             <table>
               <thead>
-                <tr><th>種別</th><th>用途</th><th>ファイル名</th><th>同意</th></tr>
+                <tr><th>種別</th><th>用途</th><th>ファイル名</th><th>同意</th><th></th></tr>
               </thead>
               <tbody>
                 {assets.map((a) => (
@@ -326,10 +340,28 @@ export default function ModelDetailPage() {
                     <td>{a.usage_type}</td>
                     <td>{a.original_filename ?? "—"}</td>
                     <td>{a.consent_confirmed ? "確認済" : "未確認"}</td>
+                    <td>
+                      <button
+                        className="ghost small"
+                        onClick={async () => {
+                          if (!window.confirm("この素材を削除しますか？")) return;
+                          setError(null);
+                          try {
+                            await api.deleteAsset(a.id);
+                            loadAssets();
+                            flash("素材を削除しました。");
+                          } catch (e) {
+                            setError((e as Error).message);
+                          }
+                        }}
+                      >
+                        削除
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {assets.length === 0 && (
-                  <tr><td colSpan={4} className="muted">素材がありません。</td></tr>
+                  <tr><td colSpan={5} className="muted">素材がありません。</td></tr>
                 )}
               </tbody>
             </table>
@@ -337,6 +369,60 @@ export default function ModelDetailPage() {
           <AssetForm modelId={id} onDone={() => { loadAssets(); flash("素材をアップロードしました。"); }} onError={setError} />
         </>
       )}
+    </div>
+  );
+}
+
+// ---------------- Model edit form ----------------
+// Editable fields mirror the backend ModelUpdate DTO (stage_name, agency_name,
+// status, notes). Authorization is enforced server-side; a 403 surfaces via onError.
+function ModelEditForm({ model, onDone, onCancel, onError }: {
+  model: Model; onDone: () => void; onCancel: () => void; onError: (m: string) => void;
+}) {
+  const [stageName, setStageName] = useState(model.stage_name);
+  const [agencyName, setAgencyName] = useState(model.agency_name ?? "");
+  const [status, setStatus] = useState(model.status);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      const payload: Partial<Model> & { notes?: string } = {
+        stage_name: stageName,
+        agency_name: agencyName || null,
+        status,
+        notes: notes || undefined,
+      };
+      await api.updateModel(model.id, payload);
+      onDone();
+    } catch (err) {
+      onError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>モデル情報を編集</h3>
+      <form onSubmit={submit}>
+        <label className="field"><span>芸名 *</span>
+          <input value={stageName} onChange={(e) => setStageName(e.target.value)} required /></label>
+        <label className="field"><span>事務所</span>
+          <input value={agencyName} onChange={(e) => setAgencyName(e.target.value)} /></label>
+        <label className="field"><span>状態</span>
+          <input value={status} onChange={(e) => setStatus(e.target.value)} /></label>
+        <label className="field"><span>備考</span>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} /></label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="submit" disabled={busy || !stageName}>
+            {busy ? "保存中…" : "保存"}
+          </button>
+          <button type="button" className="ghost" disabled={busy} onClick={onCancel}>キャンセル</button>
+        </div>
+      </form>
     </div>
   );
 }

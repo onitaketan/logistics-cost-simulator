@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { api } from "@/lib/api";
+import { api, resolveFileUrl } from "@/lib/api";
 import type { ComplianceResult, Model, Project } from "@rams/shared-types";
 import type { Output } from "@/types";
 
@@ -156,13 +156,7 @@ export default function GenerationStudio() {
                 </p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8 }}>
                   {outputs.map((o) => (
-                    <div key={o.id} style={{ textAlign: "center" }}>
-                      <div className="thumb" />
-                      <div style={{ fontSize: 11 }} className="muted">
-                        {o.width ?? "?"}×{o.height ?? "?"}
-                      </div>
-                      <div style={{ fontSize: 11 }}>{o.output_status}</div>
-                    </div>
+                    <OutputThumb key={o.id} output={o} />
                   ))}
                 </div>
               </>
@@ -196,6 +190,34 @@ export default function GenerationStudio() {
           </p>
         )}
       </aside>
+    </div>
+  );
+}
+
+// Signed, short-lived, audited preview so the generated image is visible after a
+// job completes (mock outputs return null and keep the placeholder box).
+function OutputThumb({ output }: { output: Output }) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getOutputPreview(output.id)
+      .then((r) => setPreviewUrl(r.preview_url ? resolveFileUrl(r.preview_url) : null))
+      .catch(() => setPreviewUrl(null));
+  }, [output.id]);
+
+  return (
+    <div style={{ textAlign: "center" }}>
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={previewUrl} alt="生成画像プレビュー" className="thumb" />
+      ) : (
+        <div className="thumb" />
+      )}
+      <div style={{ fontSize: 11 }} className="muted">
+        {output.width ?? "?"}×{output.height ?? "?"}
+      </div>
+      <div style={{ fontSize: 11 }}>{output.output_status}</div>
     </div>
   );
 }

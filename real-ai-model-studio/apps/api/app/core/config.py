@@ -1,10 +1,22 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Resolve .env candidates absolutely so the values load no matter the CWD. The
+# README runs uvicorn from apps/api while `.env` lives at the repo root; a bare
+# relative "env_file=.env" silently misses it and falls back to defaults. Check
+# repo-root, apps/api, and CWD (later entries take precedence for duplicates).
+_CORE = Path(__file__).resolve()
+_REPO_ROOT = _CORE.parents[4]   # …/real-ai-model-studio
+_API_DIR = _CORE.parents[2]     # …/real-ai-model-studio/apps/api
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(str(_REPO_ROOT / ".env"), str(_API_DIR / ".env"), ".env"),
+        extra="ignore",
+    )
 
     app_env: str = "local"
     api_secret_key: str = "change-me"

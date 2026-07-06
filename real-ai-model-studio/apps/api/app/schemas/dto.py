@@ -161,6 +161,18 @@ class ProjectCreate(BaseModel):
     _v_name = field_validator("project_name")(_reject_blank)
 
 
+class ProjectUpdate(BaseModel):
+    project_name: str | None = Field(default=None, min_length=1)
+    client_name: str | None = None
+    brand_name: str | None = None
+    product_name: str | None = None
+    product_category: str | None = None
+    project_status: str | None = None
+    deadline: date | None = None
+
+    _v_name = field_validator("project_name")(_reject_blank)
+
+
 class RequirementCreate(BaseModel):
     media: list[str] = []
     region: list[str] = []

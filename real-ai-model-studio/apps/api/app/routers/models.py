@@ -87,6 +87,27 @@ def update_model(
     return ok(_out(m))
 
 
+@router.delete("/{model_id}")
+def delete_model(
+    model_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUserDep, Depends(require(Perm.MODEL_EDIT))],
+):
+    """Soft-delete a model (CLAUDE.md: 削除は原則 soft delete). Sets deleted_at so
+    the row disappears from list/get but is retained for audit/legal purposes.
+    Physical deletion remains a separate, legal-judgement-only operation."""
+    m = db.get(Model, model_id)
+    if not m or m.deleted_at:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
+    m.deleted_at = datetime.now(timezone.utc)
+    db.flush()
+    audit_service.record(db, user_id=user.id, action_type="delete",
+                         target_type="model", target_id=model_id,
+                         before={"stage_name": m.stage_name})
+    db.commit()
+    return ok({"id": model_id, "deleted": True})
+
+
 @router.post("/{model_id}/adult-verification")
 def verify_adult(
     model_id: str,

@@ -17,7 +17,7 @@ real-ai-model-studio/
 │   └── web/            # Next.js frontend（判定は持たず、API結果の表示に徹する）
 ├── packages/
 │   └── shared-types/   # フロント/バック共有の型・enum辞書
-├── docker-compose.yml  # postgres + redis + api（ローカル開発）
+├── docker-compose.yml  # postgres + redis + api + worker + web（フルスタック）
 └── .env.example
 ```
 
@@ -29,7 +29,23 @@ real-ai-model-studio/
 | `apps/api/app/services/generation_service.py` | 判定通過(ok/conditional)を再検証しない限り生成ジョブを作らない生成ロック |
 | `apps/api/app/services/audit_service.py` | create/update/delete/generate/download/approve を全て監査ログ化 |
 
-## Quick start (local)
+## Quick start — フルスタック（Docker、推奨）
+
+`.env` すら不要。1コマンドで postgres + redis + api + worker + web が起動する。
+api コンテナが起動時にマイグレーションとシード（初期adminなど）を冪等に適用する。
+
+```bash
+docker compose up --build
+# web:  http://localhost:3000   （初期ログイン: admin@example.com / ChangeMe123!）
+# api:  http://localhost:8000/docs
+# 停止: docker compose down     （データ保持）
+#       docker compose down -v  （DB・保存画像も削除してまっさら化）
+```
+
+生成は worker が Redis 経由で非同期実行し、生成画像は api/worker 共有ボリュームに保存される。
+初期パスワードは運用開始時に必ずローテーションすること（`docs/08_operations_manual.md`）。
+
+## Quick start — ローカル（venv、開発向け）
 
 ```bash
 cp .env.example .env
@@ -37,10 +53,11 @@ docker compose up -d postgres redis
 cd apps/api
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
+export DATABASE_URL=postgresql+psycopg://rams:rams@localhost:5432/rams
 for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done   # スキーマ適用（番号順）
 python scripts/seed.py                              # 初期admin/mockエンジン/scope辞書を投入
 uvicorn app.main:app --reload                       # http://localhost:8000/docs
-pytest                                              # 判定エンジン・承認ゲートの単体テスト（24件）
+pytest                                              # 判定・承認・権限・セキュリティの自動テスト
 ```
 
 ## 実装ステータス（Phase 1 Foundation）
