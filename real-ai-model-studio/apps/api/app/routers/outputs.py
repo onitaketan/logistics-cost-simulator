@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.rbac import Perm, has_permission
-from app.core.security import CurrentUserDep, require
+from app.core.security import CurrentUser, CurrentUserDep, require
 from app.db.session import get_db
 from app.models.generation import ComplianceCheck, Generation, GenerationOutput
 from app.models.workflow import Approval, OutputReview
@@ -34,6 +34,16 @@ def _get_output(db: Session, output_id: str) -> GenerationOutput:
     if not o:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
     return o
+
+
+def require_review_or_view(user: CurrentUserDep) -> CurrentUser:
+    """Read access to reviews/approvals: reviewers or anyone who can view models."""
+    if has_permission(user.role, Perm.REVIEW) or has_permission(user.role, Perm.MODEL_VIEW):
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"role '{user.role}' lacks permission '{Perm.REVIEW}' or '{Perm.MODEL_VIEW}'",
+    )
 
 
 @router.patch("/{output_id}/status")
@@ -129,6 +139,54 @@ def add_approval(
     db.commit()
     return ok({"id": str(a.id), "output_status": o.output_status,
                "required_approvals": required, "missing_approvals": missing})
+
+
+@router.get("/{output_id}/reviews")
+def list_reviews(
+    output_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUser, Depends(require_review_or_view)],
+):
+    rows = db.scalars(
+        select(OutputReview)
+        .where(OutputReview.output_id == output_id)
+        .order_by(OutputReview.created_at.asc())
+    ).all()
+    return ok([
+        {
+            "id": str(r.id),
+            "review_type": r.review_type,
+            "status": r.status,
+            "comment": r.comment,
+            "reviewer_id": str(r.reviewer_id) if r.reviewer_id else None,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ])
+
+
+@router.get("/{output_id}/approvals")
+def list_approvals(
+    output_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUser, Depends(require_review_or_view)],
+):
+    rows = db.scalars(
+        select(Approval)
+        .where(Approval.output_id == output_id)
+        .order_by(Approval.approved_at.asc())
+    ).all()
+    return ok([
+        {
+            "id": str(a.id),
+            "approval_level": a.approval_level,
+            "approval_status": a.approval_status,
+            "approval_comment": a.approval_comment,
+            "approver_id": str(a.approver_id) if a.approver_id else None,
+            "approved_at": a.approved_at.isoformat() if a.approved_at else None,
+        }
+        for a in rows
+    ])
 
 
 @router.get("/{output_id}/download")

@@ -7,6 +7,7 @@ import type {
   ApprovalLevel,
   ComplianceStatus,
   OutputStatus,
+  Role,
   RiskLevel,
 } from "@rams/shared-types";
 
@@ -103,5 +104,62 @@ export interface Delivery {
   usage_end: string | null;
 }
 
+// GET /users?role=&status_= (admin only) — user management (docs/02 §11)
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: Role | string;
+  status: string; // active | suspended
+  department?: string | null;
+  created_at?: string | null;
+}
+
+// GET /generations?project_id= — generation history for a project
+export interface GenerationSummary {
+  id: string;
+  project_id: string;
+  model_id: string;
+  status: string; // queued | running | completed | failed
+  output_count: number;
+  prompt_text: string | null;
+  generated_at: string | null;
+}
+
+// GET /deliveries?project_id= — deliveries for a project
+export interface DeliverySummary {
+  id: string;
+  project_id: string;
+  output_id: string;
+  delivered_to: string;
+  delivery_method: string;
+  usage_media: string[] | string | null;
+  usage_region: string[] | string | null;
+  usage_start: string | null;
+  usage_end: string | null;
+  status: string;
+  created_at: string | null;
+}
+
+// GET /outputs/{id}/reviews — existing reviews for an output
+export interface ReviewItem {
+  id: string;
+  review_type: string;
+  status: string;
+  comment: string | null;
+  reviewer_id: string | null;
+  created_at: string | null;
+}
+
+// GET /outputs/{id}/approvals — existing approvals for an output
+export interface ApprovalItem {
+  id: string;
+  approval_level: ApprovalLevel | string;
+  approval_status: string;
+  approval_comment: string | null;
+  approver_id: string | null;
+  approved_at: string | null;
+}
+
 // Re-export commonly used unions for screen code convenience.
-export type { ComplianceStatus, OutputStatus, RiskLevel, ApprovalLevel };
+export type { ComplianceStatus, OutputStatus, RiskLevel, ApprovalLevel, Role };

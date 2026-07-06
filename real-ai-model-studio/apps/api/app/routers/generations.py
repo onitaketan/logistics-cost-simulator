@@ -7,7 +7,7 @@ trusts the UI.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,10 +16,37 @@ from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
 from app.models.generation import ComplianceCheck, Generation, GenerationOutput
 from app.schemas.common import ok
-from app.schemas.dto import GenerationCreate
+from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, GenerationCreate
 from app.services import generation_service as gen
 
 router = APIRouter(tags=["generations"])
+
+
+@router.get("/generations")
+def list_generations(
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_VIEW))],
+    project_id: str | None = None,
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+):
+    stmt = select(Generation)
+    if project_id:
+        stmt = stmt.where(Generation.project_id == project_id)
+    stmt = stmt.order_by(Generation.generated_at.desc()).limit(limit).offset(offset)
+    rows = db.scalars(stmt).all()
+    return ok([
+        {
+            "id": str(g.id),
+            "project_id": str(g.project_id),
+            "model_id": str(g.model_id),
+            "status": g.status,
+            "output_count": g.output_count,
+            "prompt_text": g.prompt_text,
+            "generated_at": g.generated_at.isoformat() if g.generated_at else None,
+        }
+        for g in rows
+    ])
 
 
 @router.post("/generations")

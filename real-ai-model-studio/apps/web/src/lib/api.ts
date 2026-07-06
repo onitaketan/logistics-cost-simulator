@@ -9,15 +9,20 @@ import type {
   Project,
 } from "@rams/shared-types";
 import type {
+  ApprovalItem,
   ApprovalResult,
   Asset,
   AuditLog,
   Contract,
   Delivery,
+  DeliverySummary,
   ExpiringContract,
   GenerationDetail,
+  GenerationSummary,
   Output,
   Permission,
+  ReviewItem,
+  User,
 } from "@/types";
 import { clearAuth, getToken, redirectToLogin } from "@/lib/auth";
 
@@ -93,6 +98,21 @@ export interface CreateDeliveryPayload {
   usage_region?: string[];
   usage_start?: string;
   usage_end?: string;
+}
+
+export interface CreateUserPayload {
+  name: string;
+  email: string;
+  password: string;
+  role: string;
+  department?: string;
+}
+
+export interface UpdateUserPayload {
+  name?: string;
+  role?: string;
+  status?: string;
+  department?: string;
 }
 
 export const api = {
@@ -234,6 +254,18 @@ export const api = {
     }),
   downloadOutput: (outputId: string) =>
     request<{ download_url: string }>(`/outputs/${outputId}/download`),
+  getOutputDownload: (outputId: string) =>
+    request<{ download_url: string }>(`/outputs/${outputId}/download`),
+  listOutputReviews: (outputId: string) =>
+    request<ReviewItem[]>(`/outputs/${outputId}/reviews`),
+  listOutputApprovals: (outputId: string) =>
+    request<ApprovalItem[]>(`/outputs/${outputId}/approvals`),
+
+  // ---- Generations (list) ----
+  listGenerations: (projectId?: string) =>
+    request<GenerationSummary[]>(
+      `/generations${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`,
+    ),
 
   // ---- Deliveries ----
   createDelivery: (payload: CreateDeliveryPayload) =>
@@ -241,6 +273,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  listDeliveries: (projectId?: string) =>
+    request<DeliverySummary[]>(
+      `/deliveries${projectId ? `?project_id=${encodeURIComponent(projectId)}` : ""}`,
+    ),
+
+  // ---- Users (admin) ----
+  listUsers: (filters: { role?: string; status_?: string; limit?: number; offset?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (filters.role) q.set("role", filters.role);
+    if (filters.status_) q.set("status_", filters.status_);
+    if (filters.limit) q.set("limit", String(filters.limit));
+    if (filters.offset) q.set("offset", String(filters.offset));
+    const qs = q.toString();
+    return request<User[]>(`/users${qs ? `?${qs}` : ""}`);
+  },
+  createUser: (payload: CreateUserPayload) =>
+    request<User>("/users", { method: "POST", body: JSON.stringify(payload) }),
+  updateUser: (id: string, payload: UpdateUserPayload) =>
+    request<User>(`/users/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
 
   // ---- Dashboard ----
   expiringContracts: (days?: number) =>

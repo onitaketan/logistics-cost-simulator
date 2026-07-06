@@ -18,6 +18,91 @@ type Tab = "overview" | "contract" | "permissions" | "assets";
 
 const yn = (b: boolean | undefined) => (b ? "可" : "不可");
 
+// Permission matrix (docs/02 §6). A read-only, aggregated view derived from the
+// contracts + permissions lists — NO compliance logic, just a legible summary of
+// what the backend records say. Boolean rows are "可" if ANY record allows it.
+type Verdict = "yes" | "no" | "conditional";
+
+interface MatrixRow {
+  label: string;
+  verdict: Verdict;
+  detail?: string;
+  approval: string;
+}
+
+const verdictBadge: Record<Verdict, { cls: string; text: string }> = {
+  yes: { cls: "ok", text: "可" },
+  conditional: { cls: "conditional", text: "条件付" },
+  no: { cls: "ng", text: "不可" },
+};
+
+function buildMatrix(contracts: Contract[], permissions: Permission[]): MatrixRow[] {
+  const anyContract = (f: (c: Contract) => boolean | undefined) =>
+    contracts.some((c) => !!f(c));
+  const anyPerm = (f: (p: Permission) => boolean | undefined) =>
+    permissions.some((p) => !!f(p));
+  // Distinct approval levels required across permissions (fallback to legal norm).
+  const approvals = Array.from(
+    new Set(permissions.map((p) => String(p.approval_required_level)).filter(Boolean)),
+  );
+  const approvalOf = (fallback: string) =>
+    approvals.length > 0 ? approvals.join(" / ") : fallback;
+
+  // Bath is a tri-state per permission; roll up to the most permissive value.
+  const bathValues = permissions.map((p) => p.bath_allowed);
+  const bath: Verdict = bathValues.includes("yes")
+    ? "yes"
+    : bathValues.includes("conditional")
+      ? "conditional"
+      : "no";
+
+  const maxExposure = permissions.reduce(
+    (m, p) => Math.max(m, p.exposure_level_max ?? 0),
+    0,
+  );
+
+  const b = (v: boolean): Verdict => (v ? "yes" : "no");
+
+  return [
+    {
+      label: "AI生成",
+      verdict: b(anyContract((c) => c.ai_generation_allowed)),
+      approval: approvalOf("internal / legal"),
+    },
+    {
+      label: "AI学習",
+      verdict: b(anyContract((c) => c.ai_training_allowed)),
+      approval: approvalOf("legal"),
+    },
+    {
+      label: "水着",
+      verdict: b(anyPerm((p) => p.swimwear_allowed)),
+      approval: approvalOf("legal"),
+    },
+    {
+      label: "下着",
+      verdict: b(anyPerm((p) => p.underwear_allowed)),
+      approval: approvalOf("person / agency"),
+    },
+    {
+      label: "入浴",
+      verdict: bath,
+      approval: approvalOf("person / agency"),
+    },
+    {
+      label: "海外",
+      verdict: b(anyPerm((p) => p.overseas_allowed)),
+      approval: approvalOf("agency"),
+    },
+    {
+      label: "露出上限",
+      verdict: maxExposure > 0 ? "conditional" : "no",
+      detail: `レベル ${maxExposure} / 5`,
+      approval: approvalOf("legal"),
+    },
+  ];
+}
+
 export default function ModelDetailPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
@@ -159,6 +244,37 @@ export default function ModelDetailPage() {
 
       {tab === "permissions" && (
         <>
+          <div className="card">
+            <h3>許諾マトリクス</h3>
+            {permissions.length === 0 && contracts.length === 0 ? (
+              <p className="muted">契約・許諾データがありません。</p>
+            ) : (
+              <table>
+                <thead>
+                  <tr><th>項目</th><th>可否</th><th>承認レベル</th></tr>
+                </thead>
+                <tbody>
+                  {buildMatrix(contracts, permissions).map((row) => {
+                    const bd = verdictBadge[row.verdict];
+                    return (
+                      <tr key={row.label}>
+                        <td>{row.label}</td>
+                        <td>
+                          <span className={`badge ${bd.cls}`}>{bd.text}</span>
+                          {row.detail && (
+                            <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
+                              {row.detail}
+                            </span>
+                          )}
+                        </td>
+                        <td>{row.approval}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
           <div className="card">
             <h3>許諾範囲</h3>
             <table>

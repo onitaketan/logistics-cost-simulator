@@ -1,14 +1,21 @@
 "use client";
 
-// Review & Approval (docs/02 §10). Enter a generation id, list its outputs, and
-// per output: set status, add a review, and add an approval. The approvals call
-// returns required_approvals + missing_approvals — we surface those so the user
-// sees "まだ全承認が揃っていない" until the backend says it is fully approved.
+// Review & Approval (docs/02 §10). Pick a project → its generations → an output.
+// Per output: set status, add a review, add an approval, and DISPLAY existing
+// reviews/approvals. The approvals call returns required_approvals +
+// missing_approvals — we surface those so the user sees "まだ全承認が揃っていない"
+// until the backend says it is fully approved. The UI carries NO approval logic.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
-import type { ApprovalLevel, OutputStatus } from "@rams/shared-types";
-import type { ApprovalResult, Output } from "@/types";
+import type { ApprovalLevel, OutputStatus, Project } from "@rams/shared-types";
+import type {
+  ApprovalItem,
+  ApprovalResult,
+  GenerationSummary,
+  Output,
+  ReviewItem,
+} from "@/types";
 
 const OUTPUT_STATUSES: OutputStatus[] = [
   "candidate",
@@ -21,14 +28,38 @@ const APPROVAL_LEVELS: ApprovalLevel[] = ["internal", "legal", "agency", "person
 const DECISIONS = ["approved", "conditional", "rejected"];
 
 export default function ReviewPage() {
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState("");
+  const [generations, setGenerations] = useState<GenerationSummary[]>([]);
   const [genId, setGenId] = useState("");
   const [outputs, setOutputs] = useState<Output[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  useEffect(() => {
+    api.listProjects().then(setProjects).catch((e) => setError((e as Error).message));
+  }, []);
+
+  async function pickProject(v: string) {
+    setProjectId(v);
+    setGenId("");
+    setGenerations([]);
+    setOutputs([]);
     setError(null);
+    if (!v) return;
     try {
-      setOutputs(await api.listOutputs(genId));
+      setGenerations(await api.listGenerations(v));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function pickGeneration(v: string) {
+    setGenId(v);
+    setOutputs([]);
+    setError(null);
+    if (!v) return;
+    try {
+      setOutputs(await api.listOutputs(v));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -36,21 +67,53 @@ export default function ReviewPage() {
 
   return (
     <div>
-      <h2>Review & Approval</h2>
+      <h2>Review &amp; Approval</h2>
       <div className="card">
-        <div style={{ display: "flex", gap: 8 }}>
-          <input placeholder="generation_id" value={genId}
-            onChange={(e) => setGenId(e.target.value)} style={{ padding: 8, flex: 1 }} />
-          <button onClick={load} disabled={!genId}>出力を読み込む</button>
+        <div className="cols-3" style={{ gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <label className="field">
+            <span>案件</span>
+            <select value={projectId} onChange={(e) => pickProject(e.target.value)}>
+              <option value="">選択してください</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.project_name}
+                  {p.client_name ? `（${p.client_name}）` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field">
+            <span>生成ジョブ</span>
+            <select
+              value={genId}
+              onChange={(e) => pickGeneration(e.target.value)}
+              disabled={!projectId}
+            >
+              <option value="">選択してください</option>
+              {generations.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {(g.generated_at ?? g.id).slice(0, 19)} — {g.status}（{g.output_count}枚）
+                </option>
+              ))}
+            </select>
+          </label>
         </div>
+        {projectId && generations.length === 0 && (
+          <p className="muted" style={{ marginBottom: 0 }}>
+            この案件には生成ジョブがありません。
+          </p>
+        )}
       </div>
       {error && <p className="error">{error}</p>}
 
       {outputs.map((o) => (
         <OutputReviewCard key={o.id} output={o} onError={setError} />
       ))}
-      {outputs.length === 0 && !error && (
-        <p className="muted">generation_id を入力して出力を読み込んでください。</p>
+      {genId && outputs.length === 0 && !error && (
+        <p className="muted">この生成ジョブには出力がありません。</p>
+      )}
+      {!genId && !error && (
+        <p className="muted">案件と生成ジョブを選択して出力を読み込んでください。</p>
       )}
     </div>
   );
@@ -75,7 +138,23 @@ function OutputReviewCard({
   const [approvalComment, setApprovalComment] = useState("");
   const [approvalResult, setApprovalResult] = useState<ApprovalResult | null>(null);
 
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+
   const [notice, setNotice] = useState<string | null>(null);
+
+  function loadReviews() {
+    api.listOutputReviews(output.id).then(setReviews).catch(() => setReviews([]));
+  }
+  function loadApprovals() {
+    api.listOutputApprovals(output.id).then(setApprovals).catch(() => setApprovals([]));
+  }
+
+  useEffect(() => {
+    loadReviews();
+    loadApprovals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [output.id]);
 
   async function applyStatus() {
     onError("");
@@ -94,6 +173,7 @@ function OutputReviewCard({
       await api.addReview(output.id, reviewType, reviewDecision, reviewComment || undefined);
       setNotice("レビューを登録しました。");
       setReviewComment("");
+      loadReviews();
     } catch (e) {
       onError((e as Error).message);
     }
@@ -111,6 +191,7 @@ function OutputReviewCard({
       setApprovalResult(res);
       setCurrentStatus(res.output_status);
       setApprovalComment("");
+      loadApprovals();
     } catch (e) {
       onError((e as Error).message);
     }
@@ -191,6 +272,48 @@ function OutputReviewCard({
               )}
             </div>
           )}
+
+          {/* Existing reviews / approvals */}
+          <div className="cols-3" style={{ gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+            <div>
+              <p className="muted" style={{ fontSize: 12, margin: "0 0 4px" }}>レビュー履歴</p>
+              {reviews.length === 0 ? (
+                <p className="muted" style={{ fontSize: 12 }}>—</p>
+              ) : (
+                <table>
+                  <thead><tr><th>種別</th><th>判定</th><th>コメント</th></tr></thead>
+                  <tbody>
+                    {reviews.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.review_type}</td>
+                        <td>{r.status}</td>
+                        <td>{r.comment ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div>
+              <p className="muted" style={{ fontSize: 12, margin: "0 0 4px" }}>承認履歴</p>
+              {approvals.length === 0 ? (
+                <p className="muted" style={{ fontSize: 12 }}>—</p>
+              ) : (
+                <table>
+                  <thead><tr><th>レベル</th><th>判定</th><th>コメント</th></tr></thead>
+                  <tbody>
+                    {approvals.map((a) => (
+                      <tr key={a.id}>
+                        <td>{a.approval_level}</td>
+                        <td>{a.approval_status}</td>
+                        <td>{a.approval_comment ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
 
           {notice && <p style={{ color: "var(--ok)", fontSize: 12 }}>{notice}</p>}
         </div>
