@@ -244,6 +244,21 @@ class PromptTemplateUpdate(BaseModel):
     _v_body = field_validator("body")(_reject_blank)
 
 
+class ApprovalRequestCreate(BaseModel):
+    # External approval portal (P2-001/P2-002): only agency/person sign-off is
+    # delegated outward; internal/legal/admin stay in-system.
+    level: Literal["agency", "person"]
+    contact_name: str | None = None
+    contact_email: EmailStr | None = None
+    expires_in_days: int = Field(default=7, ge=1, le=90)
+
+
+class PortalDecision(BaseModel):
+    decision: Literal["approved", "conditional", "rejected"]
+    comment: str | None = None
+    approver_name: str | None = None
+
+
 class OutputStatusUpdate(BaseModel):
     # Selection statuses ONLY. 'approved' can be reached solely through the
     # approval-completeness gate (POST /outputs/{id}/approvals) and 'delivered'

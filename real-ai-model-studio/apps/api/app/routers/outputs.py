@@ -14,14 +14,17 @@ from app.models.workflow import Approval, OutputReview
 from app.schemas.common import ok
 from app.schemas.dto import ApprovalCreate, OutputStatusUpdate, ReviewCreate, ReviseRequest
 from app.services import audit_service, generation_service
-from app.services.approval_service import ApprovalRecord, evaluate_approvals
+from app.services.approval_service import recompute_output_status as evaluate_approvals_status
 from app.services.storage_service import signed_url
 
 # which RBAC permission each approval level demands
 _LEVEL_PERM = {
     "internal": Perm.APPROVE_INTERNAL,
     "legal": Perm.APPROVE_LEGAL,
-    "agency": Perm.APPROVE_LEGAL,   # agency/person sign-off recorded by legal in MVP (no external portal yet)
+    # agency/person can ALSO be recorded externally via the approval portal
+    # (routers/approval_portal.py, approver_id NULL). This in-system path lets a
+    # legal-permission user record them directly when a portal round-trip isn't used.
+    "agency": Perm.APPROVE_LEGAL,
     "person": Perm.APPROVE_LEGAL,
     "admin": Perm.APPROVE_ADMIN,
 }
@@ -195,30 +198,15 @@ def add_approval(
     db.add(a)
     db.flush()
 
-    # Resolve the approval levels required by this output's compliance check.
-    generation = db.get(Generation, o.generation_id)
-    check = db.get(ComplianceCheck, generation.compliance_check_id) if generation else None
-    required = list(check.required_approvals or []) if check else []
-
-    records = [
-        ApprovalRecord(level=r.approval_level, status=r.approval_status)
-        for r in db.scalars(select(Approval).where(Approval.output_id == output_id)).all()
-    ]
-    fully_approved, missing = evaluate_approvals(required, records)
-
-    if any(r.status in ("rejected", "revoked") for r in records):
-        o.output_status = "rejected"
-    elif fully_approved:
-        o.output_status = "approved"
-    # else: stays candidate/selected — not yet fully approved
-    db.flush()
+    # Drive the shared completeness gate (same logic the external portal uses).
+    output_status, required, missing = evaluate_approvals_status(db, o)
 
     audit_service.record(db, user_id=user.id, action_type="approve", target_type="output",
                          target_id=output_id,
                          after={"level": body.approval_level, "status": body.approval_status,
-                                "fully_approved": fully_approved, "missing": missing})
+                                "fully_approved": not missing, "missing": missing})
     db.commit()
-    return ok({"id": str(a.id), "output_status": o.output_status,
+    return ok({"id": str(a.id), "output_status": output_status,
                "required_approvals": required, "missing_approvals": missing})
 
 

@@ -161,6 +161,32 @@ export interface ApprovalItem {
   approved_at: string | null;
 }
 
+// GET /outputs/{id}/approval-requests — external sign-off links (agency/person)
+// issued for an output. The single-use token is NOT part of this shape; it is
+// returned exactly once by POST /outputs/{id}/approval-requests.
+export interface ApprovalRequest {
+  id: string;
+  level: "agency" | "person";
+  status: string; // pending | approved | conditional | rejected | expired
+  contact_name: string | null;
+  contact_email: string | null;
+  expires_at: string;
+  created_at: string;
+  decided_at: string | null;
+}
+
+// GET /portal/approvals/{token} — UNAUTHENTICATED view the external approver sees.
+// No session; the token IS the credential. preview_url is a signed, short-lived URL.
+export interface PortalApprovalView {
+  level: string; // agency | person
+  output_id: string;
+  preview_url: string | null;
+  project_name: string;
+  status: string; // pending | approved | conditional | rejected | expired
+  expires_at: string;
+  already_decided: boolean;
+}
+
 // GET /prompt-templates — reusable prompt templates (P1-004)
 export interface PromptTemplate {
   id: string;

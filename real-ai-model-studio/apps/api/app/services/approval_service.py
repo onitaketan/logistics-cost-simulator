@@ -47,3 +47,37 @@ def evaluate_approvals(
     effective_blocked = blocked - approved
     missing = sorted((required_set - approved) | (required_set & effective_blocked))
     return (len(missing) == 0, missing)
+
+
+def recompute_output_status(db, output) -> tuple[str, list[str], list[str]]:
+    """Recompute an output's status from ALL its approval rows and its compliance
+    check's required levels, and persist the result (flush, not commit).
+
+    Shared by the internal approval endpoint and the external portal so both
+    channels drive the same completeness gate: an output reaches ``approved``
+    only when every required level has an ``approved`` row and none is blocked;
+    any rejected/revoked row forces ``rejected``. Returns
+    ``(output_status, required, missing)``.
+    """
+    from sqlalchemy import select
+
+    from app.models.generation import ComplianceCheck, Generation
+    from app.models.workflow import Approval
+
+    generation = db.get(Generation, output.generation_id)
+    check = db.get(ComplianceCheck, generation.compliance_check_id) if generation else None
+    required = list(check.required_approvals or []) if check else []
+
+    records = [
+        ApprovalRecord(level=a.approval_level, status=a.approval_status)
+        for a in db.scalars(select(Approval).where(Approval.output_id == output.id)).all()
+    ]
+    fully_approved, missing = evaluate_approvals(required, records)
+
+    if any(r.status in ("rejected", "revoked") for r in records):
+        output.output_status = "rejected"
+    elif fully_approved:
+        output.output_status = "approved"
+    # else: stays candidate/selected — not yet fully approved
+    db.flush()
+    return output.output_status, required, missing

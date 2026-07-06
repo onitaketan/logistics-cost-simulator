@@ -11,6 +11,7 @@ import { api, resolveFileUrl } from "@/lib/api";
 import type { ApprovalLevel, OutputStatus, Project } from "@rams/shared-types";
 import type {
   ApprovalItem,
+  ApprovalRequest,
   ApprovalResult,
   GenerationSummary,
   Output,
@@ -143,16 +144,53 @@ function OutputReviewCard({
 
   const [notice, setNotice] = useState<string | null>(null);
 
+  // External approval links (agency/person self sign-off via portal)
+  const [linkLevel, setLinkLevel] = useState<"agency" | "person">("agency");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [issuedUrl, setIssuedUrl] = useState<string | null>(null);
+  const [issueBusy, setIssueBusy] = useState(false);
+  const [approvalRequests, setApprovalRequests] = useState<ApprovalRequest[]>([]);
+
   function loadReviews() {
     api.listOutputReviews(output.id).then(setReviews).catch(() => setReviews([]));
   }
   function loadApprovals() {
     api.listOutputApprovals(output.id).then(setApprovals).catch(() => setApprovals([]));
   }
+  function loadApprovalRequests() {
+    api
+      .listApprovalRequests(output.id)
+      .then(setApprovalRequests)
+      .catch(() => setApprovalRequests([]));
+  }
+
+  async function issueLink() {
+    onError("");
+    setIssuedUrl(null);
+    setIssueBusy(true);
+    try {
+      const r = await api.issueApprovalRequest(output.id, {
+        level: linkLevel,
+        contact_name: contactName || undefined,
+        contact_email: contactEmail || undefined,
+      });
+      setIssuedUrl(window.location.origin + r.portal_path);
+      setNotice("外部承認リンクを発行しました。");
+      setContactName("");
+      setContactEmail("");
+      loadApprovalRequests();
+    } catch (e) {
+      onError((e as Error).message);
+    } finally {
+      setIssueBusy(false);
+    }
+  }
 
   useEffect(() => {
     loadReviews();
     loadApprovals();
+    loadApprovalRequests();
     // Signed, short-lived, audited preview so the reviewer can SEE the candidate
     // (mock outputs return null and keep the placeholder box).
     api
@@ -333,6 +371,90 @@ function OutputReviewCard({
                         <td>{a.approval_level}</td>
                         <td>{a.approval_status}</td>
                         <td>{a.approval_comment ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* External approval link (docs/05 §9): issue a single-use, expiring
+              portal URL so an agency or the person themselves records their
+              sign-off WITHOUT logging into the system. The token is shown only
+              inside the generated URL, once. */}
+          <div
+            style={{
+              marginTop: 14,
+              paddingTop: 12,
+              borderTop: "1px solid var(--line)",
+            }}
+          >
+            <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>
+              外部承認リンク（事務所/本人）
+            </p>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <select
+                value={linkLevel}
+                onChange={(e) => setLinkLevel(e.target.value as "agency" | "person")}
+              >
+                <option value="agency">事務所（agency）</option>
+                <option value="person">本人（person）</option>
+              </select>
+              <input
+                placeholder="担当者名（任意）"
+                value={contactName}
+                onChange={(e) => setContactName(e.target.value)}
+                style={{ padding: 6, minWidth: 140 }}
+              />
+              <input
+                placeholder="メール（任意）"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+                style={{ padding: 6, minWidth: 160 }}
+              />
+              <button className="small" onClick={issueLink} disabled={issueBusy}>
+                {issueBusy ? "発行中…" : "発行"}
+              </button>
+            </div>
+
+            {issuedUrl && (
+              <div style={{ marginTop: 8 }}>
+                <input
+                  readOnly
+                  value={issuedUrl}
+                  onFocus={(e) => e.currentTarget.select()}
+                  style={{ padding: 6, width: "100%", fontFamily: "monospace", fontSize: 12 }}
+                />
+                <p className="muted" style={{ fontSize: 11, margin: "4px 0 0" }}>
+                  このリンクは一度きり有効で、有効期限を過ぎると使用できません。相手に共有してください。
+                </p>
+              </div>
+            )}
+
+            <div style={{ marginTop: 10 }}>
+              <p className="muted" style={{ fontSize: 12, margin: "0 0 4px" }}>
+                発行済みリンク
+              </p>
+              {approvalRequests.length === 0 ? (
+                <p className="muted" style={{ fontSize: 12 }}>—</p>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>区分</th>
+                      <th>状態</th>
+                      <th>宛先</th>
+                      <th>有効期限</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvalRequests.map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.level === "agency" ? "事務所" : "本人"}</td>
+                        <td>{r.status}</td>
+                        <td>{r.contact_name ?? r.contact_email ?? "—"}</td>
+                        <td>{r.expires_at?.slice(0, 10)}</td>
                       </tr>
                     ))}
                   </tbody>

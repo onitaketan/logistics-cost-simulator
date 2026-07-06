@@ -10,6 +10,7 @@ import type {
 } from "@rams/shared-types";
 import type {
   ApprovalItem,
+  ApprovalRequest,
   ApprovalResult,
   Asset,
   AuditLog,
@@ -21,6 +22,7 @@ import type {
   GenerationSummary,
   Output,
   Permission,
+  PortalApprovalView,
   PromptTemplate,
   ReviewItem,
   User,
@@ -81,6 +83,26 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
   return body.data as T;
 }
 
+// Unauthenticated request for the external approval PORTAL. A portal visitor has
+// NO session, so this sends no Authorization header and — critically — does NOT
+// clear auth or redirect to /login on 401 (that would wrongly bounce a valid
+// portal visitor who is simply not a logged-in user). It still unwraps the
+// {success,data,error} envelope and throws error.message on failure.
+async function portalRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = (await res.json()) as ApiResponse<T>;
+  if (!body.success || body.error) {
+    throw new Error(body.error?.message ?? `Request failed: ${res.status}`);
+  }
+  return body.data as T;
+}
+
 export interface GenerationParams {
   output_count: number;
   width: number;
@@ -115,6 +137,19 @@ export interface CreateDeliveryPayload {
   usage_region?: string[];
   usage_start?: string;
   usage_end?: string;
+}
+
+export interface IssueApprovalRequestPayload {
+  level: "agency" | "person";
+  contact_name?: string;
+  contact_email?: string;
+  expires_in_days?: number;
+}
+
+export interface SubmitPortalApprovalPayload {
+  decision: "approved" | "conditional" | "rejected";
+  comment?: string;
+  approver_name?: string;
 }
 
 export interface CreateUserPayload {
@@ -280,6 +315,22 @@ export const api = {
   listOutputApprovals: (outputId: string) =>
     request<ApprovalItem[]>(`/outputs/${outputId}/approvals`),
 
+  // ---- External approval requests (agency/person sign-off links, docs/05 §9) ----
+  // Issues a single-use, expiring portal link. The token is returned ONCE here.
+  issueApprovalRequest: (outputId: string, payload: IssueApprovalRequestPayload) =>
+    request<{
+      id: string;
+      token: string;
+      portal_path: string;
+      level: "agency" | "person";
+      expires_at: string;
+    }>(`/outputs/${outputId}/approval-requests`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  listApprovalRequests: (outputId: string) =>
+    request<ApprovalRequest[]>(`/outputs/${outputId}/approval-requests`),
+
   // ---- Generations (list) ----
   listGenerations: (projectId?: string) =>
     request<GenerationSummary[]>(
@@ -384,4 +435,17 @@ export const api = {
     request<{ id: string; disabled: boolean }>(`/prompt-templates/${id}`, {
       method: "DELETE",
     }),
+
+  // ---- External approval PORTAL (UNAUTHENTICATED — token is the credential) ----
+  // These MUST NOT carry a Bearer token nor redirect on 401; a portal visitor has
+  // no session. They go through portalRequest().
+  getPortalApproval: (token: string) =>
+    portalRequest<PortalApprovalView>(
+      `/portal/approvals/${encodeURIComponent(token)}`,
+    ),
+  submitPortalApproval: (token: string, payload: SubmitPortalApprovalPayload) =>
+    portalRequest<{ output_status: string; recorded: true }>(
+      `/portal/approvals/${encodeURIComponent(token)}`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
 };

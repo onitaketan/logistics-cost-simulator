@@ -16,6 +16,7 @@ import app.models  # noqa: F401  (register ORM tables)
 from app.core.config import get_settings
 from app.db.session import engine
 from app.routers import (
+    approval_portal,
     assets,
     audit,
     auth,
@@ -62,6 +63,7 @@ for r in (
     generations.router,
     prompt_templates.router,
     outputs.router,
+    approval_portal.router,
     deliveries.router,
     files.router,
     audit.router,
