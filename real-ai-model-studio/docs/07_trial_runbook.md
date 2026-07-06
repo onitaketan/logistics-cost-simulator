@@ -23,7 +23,7 @@ cp .env.example .env          # 必要に応じ CORS_ORIGINS 等を調整
 docker compose up -d postgres redis      # もしくは既存の PostgreSQL を使用
 cd apps/api
 pip install -e .
-psql "$DATABASE_URL" -f migrations/0001_init.sql   # スキーマ
+for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done   # スキーマ（番号順に全適用）
 python scripts/seed.py                              # 初期admin/エンジン/scope辞書
 python scripts/seed_demo.py                         # 仮テスト用デモデータ
 uvicorn app.main:app --host 0.0.0.0 --port 8000     # http://localhost:8000/docs

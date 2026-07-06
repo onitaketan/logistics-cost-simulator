@@ -13,7 +13,7 @@ from app.models.generation import ComplianceCheck, Generation, GenerationOutput
 from app.models.workflow import Approval, OutputReview
 from app.schemas.common import ok
 from app.schemas.dto import ApprovalCreate, OutputStatusUpdate, ReviewCreate, ReviseRequest
-from app.services import audit_service
+from app.services import audit_service, generation_service
 from app.services.approval_service import ApprovalRecord, evaluate_approvals
 from app.services.storage_service import signed_url
 
@@ -70,13 +70,60 @@ def revise(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.GENERATE))],
 ):
-    _get_output(db, output_id)
-    # Revision re-uses the parent generation's compliance check; a new generation
-    # row is created by the generation flow. Here we only record intent (scaffold).
-    audit_service.record(db, user_id=user.id, action_type="generate", target_type="output",
-                         target_id=output_id, after={"revision": body.revision_prompt})
+    """Revision generation (P1-006): a NEW generation job that reuses the parent's
+    compliance check. All three gates still apply — the request-time gate here,
+    the DB trigger at INSERT, and the worker's execution-time re-validation — so
+    a revision can never outlive a revoked/expired permission."""
+    from app.services.generation_service import ComplianceCheckRef
+
+    o = _get_output(db, output_id)
+    parent = db.get(Generation, o.generation_id)
+    if parent is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "元の生成ジョブが見つかりません。")
+
+    check = db.get(ComplianceCheck, parent.compliance_check_id)
+    ref = None
+    if check:
+        ref = ComplianceCheckRef(
+            id=str(check.id), project_id=str(check.project_id),
+            model_id=str(check.model_id), check_status=check.check_status,
+        )
+    # Raises GenerationBlocked -> app-level 422 envelope, same as /generations.
+    generation_service.assert_generation_allowed(
+        ref, project_id=str(parent.project_id), model_id=str(parent.model_id)
+    )
+
+    params = dict(parent.generation_params or {})
+    if body.target_area:
+        params["revision_target_area"] = body.target_area
+    params["revision_of_output"] = output_id
+
+    revision = Generation(
+        project_id=parent.project_id,
+        model_id=parent.model_id,
+        compliance_check_id=parent.compliance_check_id,
+        ai_engine_id=parent.ai_engine_id,
+        prompt_text=body.revision_prompt,
+        negative_prompt_text=parent.negative_prompt_text,
+        generation_params=params,
+        output_count=int(params.get("output_count", 1)),
+        status="queued",
+        generated_by=user.id,
+    )
+    db.add(revision)
+    # Commit BEFORE enqueue (DB trigger validates at INSERT; the eager worker
+    # opens its own session and must see the row).
     db.commit()
-    return ok({"queued": True, "note": "revision uses parent compliance check"})
+
+    generation_service.enqueue_generation(revision.id)
+    db.refresh(revision)
+
+    audit_service.record(db, user_id=user.id, action_type="generate", target_type="output",
+                         target_id=output_id,
+                         after={"revision_generation_id": str(revision.id),
+                                "revision_prompt": body.revision_prompt})
+    db.commit()
+    return ok({"generation_id": str(revision.id), "status": revision.status})
 
 
 @router.post("/{output_id}/reviews")
@@ -187,6 +234,29 @@ def list_approvals(
         }
         for a in rows
     ])
+
+
+@router.get("/{output_id}/preview")
+def preview(
+    output_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUser, Depends(require_review_or_view)],
+):
+    """Short-lived signed URL so a reviewer can SEE a candidate image.
+
+    Review必ずしも承認済みではない画像を目視確認する必要がある（docs/05 §10）ため、
+    ダウンロード（承認後のみ）とは別に、閲覧専用の署名URLを許可ロールへ発行する。
+    アクセスは監査ログ(view)に記録される（docs/06 §2「本人データへの全アクセスを記録」）。
+    """
+    o = _get_output(db, output_id)
+    if o.file_path.startswith("mock://"):
+        # Mock engine outputs have no stored bytes — nothing to preview.
+        return ok({"preview_url": None})
+    url = signed_url(o.file_path)
+    audit_service.record(db, user_id=user.id, action_type="view", target_type="output",
+                         target_id=output_id, after={"purpose": "review_preview"})
+    db.commit()
+    return ok({"preview_url": url})
 
 
 @router.get("/{output_id}/download")

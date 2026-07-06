@@ -7,7 +7,7 @@
 // until the backend says it is fully approved. The UI carries NO approval logic.
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, resolveFileUrl } from "@/lib/api";
 import type { ApprovalLevel, OutputStatus, Project } from "@rams/shared-types";
 import type {
   ApprovalItem,
@@ -140,6 +140,10 @@ function OutputReviewCard({
 
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  const [revisePrompt, setRevisePrompt] = useState("");
+  const [reviseBusy, setReviseBusy] = useState(false);
 
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -153,6 +157,12 @@ function OutputReviewCard({
   useEffect(() => {
     loadReviews();
     loadApprovals();
+    // Signed, short-lived, audited preview so the reviewer can SEE the candidate
+    // (mock outputs return null and keep the placeholder box).
+    api
+      .getOutputPreview(output.id)
+      .then((r) => setPreviewUrl(r.preview_url ? resolveFileUrl(r.preview_url) : null))
+      .catch(() => setPreviewUrl(null));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [output.id]);
 
@@ -201,7 +211,12 @@ function OutputReviewCard({
     <div className="card">
       <div style={{ display: "flex", gap: 16 }}>
         <div style={{ textAlign: "center" }}>
-          <div className="thumb" />
+          {previewUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={previewUrl} alt="生成画像プレビュー" className="thumb" />
+          ) : (
+            <div className="thumb" />
+          )}
           <div className="muted" style={{ fontSize: 11 }}>
             {output.width ?? "?"}×{output.height ?? "?"}
           </div>
@@ -313,6 +328,36 @@ function OutputReviewCard({
                 </table>
               )}
             </div>
+          </div>
+
+          {/* Revision generation (P1-006): new job reusing the parent's compliance
+              check — the backend re-gates it (request-time / DB trigger / worker). */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginTop: 12 }}>
+            <input
+              placeholder="修正指示（例: 背景を高級感のある照明に。人物は変更しない）"
+              value={revisePrompt}
+              onChange={(e) => setRevisePrompt(e.target.value)}
+              style={{ padding: 6, flex: 1, minWidth: 220 }}
+            />
+            <button
+              className="small ghost"
+              disabled={reviseBusy || !revisePrompt.trim()}
+              onClick={async () => {
+                onError("");
+                setReviseBusy(true);
+                try {
+                  const r = await api.reviseOutput(output.id, { revision_prompt: revisePrompt });
+                  setNotice(`修正生成を開始しました（generation: ${String(r.generation_id ?? "").slice(0, 8)}… / ${r.status ?? ""}）。生成ジョブ一覧を再選択すると確認できます。`);
+                  setRevisePrompt("");
+                } catch (e) {
+                  onError((e as Error).message);
+                } finally {
+                  setReviseBusy(false);
+                }
+              }}
+            >
+              {reviseBusy ? "生成中…" : "修正生成"}
+            </button>
           </div>
 
           {notice && <p style={{ color: "var(--ok)", fontSize: 12 }}>{notice}</p>}

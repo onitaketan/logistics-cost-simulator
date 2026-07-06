@@ -98,8 +98,8 @@ export interface Delivery {
   output_id: string;
   delivered_to: string;
   delivery_method: string;
-  usage_media: string | null;
-  usage_region: string | null;
+  usage_media: string[] | null;
+  usage_region: string[] | null;
   usage_start: string | null;
   usage_end: string | null;
 }

@@ -9,7 +9,8 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./apps/api/migrations/0001_init.sql:/docker-entrypoint-initdb.d/0001_init.sql:ro
+      # initdb runs *.sql alphabetically, so all migrations apply in order.
+      - ./apps/api/migrations:/docker-entrypoint-initdb.d:ro
 
   redis:
     image: redis:7

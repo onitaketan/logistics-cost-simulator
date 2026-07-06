@@ -37,7 +37,7 @@ docker compose up -d postgres redis
 cd apps/api
 python -m venv .venv && source .venv/bin/activate
 pip install -e .
-psql "$DATABASE_URL" -f migrations/0001_init.sql   # スキーマ適用
+for f in migrations/*.sql; do psql "$DATABASE_URL" -f "$f"; done   # スキーマ適用（番号順）
 python scripts/seed.py                              # 初期admin/mockエンジン/scope辞書を投入
 uvicorn app.main:app --reload                       # http://localhost:8000/docs
 pytest                                              # 判定エンジン・承認ゲートの単体テスト（24件）

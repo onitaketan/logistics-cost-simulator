@@ -28,6 +28,13 @@ import { clearAuth, getToken, redirectToLogin } from "@/lib/auth";
 
 const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
+// Signed URLs from the backend are absolute for S3/R2 (presigned) but relative
+// ("/api/v1/files?...") for the local backend — resolve those against the API host.
+export function resolveFileUrl(url: string): string {
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return BASE.replace(/\/api\/v1$/, "") + url;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const tok = getToken();
   const res = await fetch(`${BASE}${path}`, {
@@ -252,10 +259,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ approval_level, approval_status, approval_comment }),
     }),
-  downloadOutput: (outputId: string) =>
-    request<{ download_url: string }>(`/outputs/${outputId}/download`),
   getOutputDownload: (outputId: string) =>
     request<{ download_url: string }>(`/outputs/${outputId}/download`),
+  // Review preview: signed URL to SEE a candidate image (pre-approval, audited).
+  getOutputPreview: (outputId: string) =>
+    request<{ preview_url: string | null }>(`/outputs/${outputId}/preview`),
   listOutputReviews: (outputId: string) =>
     request<ReviewItem[]>(`/outputs/${outputId}/reviews`),
   listOutputApprovals: (outputId: string) =>
