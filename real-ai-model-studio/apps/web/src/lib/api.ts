@@ -96,7 +96,14 @@ async function portalRequest<T>(path: string, init: RequestInit = {}): Promise<T
       ...(init.headers ?? {}),
     },
   });
-  const body = (await res.json()) as ApiResponse<T>;
+  // The portal is external-facing; a non-JSON body (proxy/error page) must surface
+  // as a clean "link invalid/expired" message, not a raw JSON parse error.
+  let body: ApiResponse<T>;
+  try {
+    body = (await res.json()) as ApiResponse<T>;
+  } catch {
+    throw new Error("リンクが無効か、有効期限が切れている可能性があります。");
+  }
   if (!body.success || body.error) {
     throw new Error(body.error?.message ?? `Request failed: ${res.status}`);
   }
