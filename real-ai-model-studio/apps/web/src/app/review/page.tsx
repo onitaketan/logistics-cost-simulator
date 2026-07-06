@@ -17,13 +17,9 @@ import type {
   ReviewItem,
 } from "@/types";
 
-const OUTPUT_STATUSES: OutputStatus[] = [
-  "candidate",
-  "selected",
-  "rejected",
-  "approved",
-  "delivered",
-];
+// Selection statuses only — 'approved' is granted exclusively by the approval
+// gate and 'delivered' by delivery. The backend rejects them here too.
+const OUTPUT_STATUSES: OutputStatus[] = ["candidate", "selected", "rejected"];
 const APPROVAL_LEVELS: ApprovalLevel[] = ["internal", "legal", "agency", "person", "admin"];
 const DECISIONS = ["approved", "conditional", "rejected"];
 

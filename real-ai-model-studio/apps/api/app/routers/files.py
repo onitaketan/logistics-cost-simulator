@@ -4,6 +4,8 @@ Requires a valid HMAC token minted by storage_service.signed_url (short TTL).
 There is no unauthenticated/public path to raw image files (docs/06 §1).
 """
 
+import mimetypes
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.services.storage_service import read, verify_signed_token
@@ -23,4 +25,6 @@ def get_file(
         data = read(uri)
     except FileNotFoundError:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ファイルが見つかりません。")
-    return Response(content=data, media_type="application/octet-stream")
+    # Correct image type so <img> previews render; fall back to octet-stream.
+    media_type, _ = mimetypes.guess_type(uri)
+    return Response(content=data, media_type=media_type or "application/octet-stream")

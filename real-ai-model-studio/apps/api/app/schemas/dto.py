@@ -72,6 +72,8 @@ class UserUpdate(BaseModel):
     role: UserRole | None = None
     status: UserStatus | None = None
     department: str | None = None
+    # Admin password reset (hashed server-side; never echoed back or audited).
+    password: str | None = Field(default=None, min_length=8)
 
     _v_name = field_validator("name")(_reject_blank)
 
@@ -209,7 +211,11 @@ class GenerationCreate(BaseModel):
 
 
 class OutputStatusUpdate(BaseModel):
-    output_status: OutputStatus
+    # Selection statuses ONLY. 'approved' can be reached solely through the
+    # approval-completeness gate (POST /outputs/{id}/approvals) and 'delivered'
+    # solely through delivery — allowing them here would let a single REVIEW-role
+    # user bypass the multi-level approval chain (CLAUDE.md #3, docs/05 §9).
+    output_status: Literal["candidate", "selected", "rejected"]
 
 
 class ReviseRequest(BaseModel):

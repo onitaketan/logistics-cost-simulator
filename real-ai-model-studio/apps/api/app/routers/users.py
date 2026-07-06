@@ -67,10 +67,18 @@ def update_user(
     if not u:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ユーザーが見つかりません。")
     before = _out(u)
-    for k, v in body.model_dump(exclude_unset=True).items():
+    changes = body.model_dump(exclude_unset=True)
+    # Password is hashed and NEVER written to the audit log (only the fact of reset).
+    new_password = changes.pop("password", None)
+    if new_password:
+        u.password_hash = hash_password(new_password)
+    for k, v in changes.items():
         setattr(u, k, v)
     db.flush()
+    after = _out(u)
+    if new_password:
+        after = {**after, "password_reset": True}
     audit_service.record(db, user_id=user.id, action_type="update",
-                         target_type="user", target_id=user_id, before=before, after=_out(u))
+                         target_type="user", target_id=user_id, before=before, after=after)
     db.commit()
     return ok(_out(u))

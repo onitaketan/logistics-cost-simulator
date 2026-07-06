@@ -8,36 +8,59 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { AuditLog } from "@/types";
 
-const ACTION_TYPES = ["", "create", "update", "generate", "review", "approve", "deliver", "download"];
-const TARGET_TYPES = ["", "model", "project", "generation", "output", "delivery", "contract", "permission"];
+const ACTION_TYPES = ["", "create", "update", "generate", "review", "approve", "deliver", "download", "view", "login", "delete"];
+const TARGET_TYPES = ["", "model", "project", "generation", "output", "delivery", "contract", "permission", "user", "compliance_check"];
 
 export default function AuditPage() {
   const [logs, setLogs] = useState<AuditLog[]>([]);
   const [actionType, setActionType] = useState("");
   const [targetType, setTargetType] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  const filters = useCallback(
+    () => ({
+      action_type: actionType || undefined,
+      target_type: targetType || undefined,
+      from: dateFrom || undefined,
+      to: dateTo || undefined,
+    }),
+    [actionType, targetType, dateFrom, dateTo],
+  );
 
   const load = useCallback(() => {
     setError(null);
     api
-      .listAuditLogs({
-        action_type: actionType || undefined,
-        target_type: targetType || undefined,
-        limit: 100,
-      })
+      .listAuditLogs({ ...filters(), limit: 100 })
       .then(setLogs)
       .catch((e) => setError((e as Error).message));
-  }, [actionType, targetType]);
+  }, [filters]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  async function downloadCsv() {
+    setError(null);
+    try {
+      const blob = await api.exportAuditCsv(filters());
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "audit_logs.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   return (
     <div>
       <h2>Audit Log</h2>
       <div className="card">
-        <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
           <label className="field" style={{ marginBottom: 0 }}>
             <span>アクション</span>
             <select value={actionType} onChange={(e) => setActionType(e.target.value)}>
@@ -54,7 +77,16 @@ export default function AuditPage() {
               ))}
             </select>
           </label>
+          <label className="field" style={{ marginBottom: 0 }}>
+            <span>開始日</span>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label className="field" style={{ marginBottom: 0 }}>
+            <span>終了日</span>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
           <button onClick={load}>再取得</button>
+          <button className="ghost" onClick={downloadCsv}>CSVエクスポート</button>
         </div>
       </div>
       {error && <p className="error">{error}</p>}

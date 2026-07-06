@@ -120,6 +120,7 @@ export interface UpdateUserPayload {
   role?: string;
   status?: string;
   department?: string;
+  password?: string; // admin reset — hashed server-side, min 8 chars
 }
 
 export const api = {
@@ -311,13 +312,37 @@ export const api = {
   listAuditLogs: (filters: {
     target_type?: string;
     action_type?: string;
+    from?: string; // YYYY-MM-DD
+    to?: string;
     limit?: number;
   } = {}) => {
     const q = new URLSearchParams();
     if (filters.target_type) q.set("target_type", filters.target_type);
     if (filters.action_type) q.set("action_type", filters.action_type);
+    if (filters.from) q.set("from", filters.from);
+    if (filters.to) q.set("to", filters.to);
     if (filters.limit) q.set("limit", String(filters.limit));
     const qs = q.toString();
     return request<AuditLog[]>(`/audit-logs${qs ? `?${qs}` : ""}`);
+  },
+
+  // CSV export (P1-003) — raw fetch since the response is text/csv, not the JSON envelope.
+  exportAuditCsv: async (filters: {
+    target_type?: string;
+    action_type?: string;
+    from?: string;
+    to?: string;
+  } = {}): Promise<Blob> => {
+    const q = new URLSearchParams();
+    if (filters.target_type) q.set("target_type", filters.target_type);
+    if (filters.action_type) q.set("action_type", filters.action_type);
+    if (filters.from) q.set("from", filters.from);
+    if (filters.to) q.set("to", filters.to);
+    const tok = getToken();
+    const res = await fetch(`${BASE}/audit-logs/export?${q.toString()}`, {
+      headers: { ...(tok ? { Authorization: `Bearer ${tok}` } : {}) },
+    });
+    if (!res.ok) throw new Error(`CSVエクスポートに失敗しました (${res.status})`);
+    return res.blob();
   },
 };

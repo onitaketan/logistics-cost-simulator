@@ -56,6 +56,18 @@ export default function SettingsPage() {
     }
   }
 
+  async function resetPassword(u: User) {
+    const pw = window.prompt(`${u.name} の新しいパスワード（8文字以上）を入力してください:`);
+    if (!pw) return;
+    setError(null);
+    try {
+      await api.updateUser(u.id, { password: pw });
+      setNotice(`${u.name} のパスワードを再設定しました。`);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
   return (
     <div>
       <h2>Settings — ユーザー管理</h2>
@@ -104,7 +116,10 @@ export default function SettingsPage() {
                       <button className="small" onClick={() => changeStatus(u, "active")}>
                         有効化
                       </button>
-                    )}
+                    )}{" "}
+                    <button className="ghost small" onClick={() => resetPassword(u)}>
+                      PW再設定
+                    </button>
                   </td>
                 </tr>
               ))}
