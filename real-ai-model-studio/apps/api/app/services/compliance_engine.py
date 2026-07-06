@@ -257,11 +257,19 @@ def _evaluate_exposure(req, perm, add, approvals) -> None:
         else:
             add("swimwear", "水着表現は条件付き。法務承認が必要です。", Status.CONDITIONAL)
             approvals.add("legal")
+    # Level 4 (下着/入浴/ボディライン強調) is Conditional by definition (docs/05 §4),
+    # independent of the outfit LABEL — mirror the swimwear branch, which is driven
+    # by level alone. Previously a level-4 requirement with a generic outfit_type
+    # (e.g. "normal") fell through and was silently OK.
     if outfit == "underwear" or level == Exposure.UNDERWEAR_BATH:
         if outfit == "underwear" and not perm.underwear_allowed:
             add("underwear", "下着表現は許諾されていません。", Status.NG)
-        elif outfit == "underwear":
-            add("underwear", "下着表現は条件付き。法務+本人/事務所承認が必要です。", Status.CONDITIONAL)
+        else:
+            add(
+                "underwear" if outfit == "underwear" else "exposure_level",
+                "下着/入浴/ボディライン強調（露出レベル4）は条件付き。法務+本人/事務所承認が必要です。",
+                Status.CONDITIONAL,
+            )
             approvals.update({"legal", "agency"})
     if outfit == "bath":
         if perm.bath_allowed == "no":

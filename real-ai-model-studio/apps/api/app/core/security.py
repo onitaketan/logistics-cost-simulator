@@ -14,9 +14,11 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.rbac import Perm, has_permission
+from app.db.session import get_db
 
 _ALGO = "HS256"
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -65,7 +67,10 @@ def create_access_token(user_id: str, email: str, role: str) -> str:
     return jwt.encode(payload, settings.api_secret_key, algorithm=_ALGO)
 
 
-def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> CurrentUser:
+def get_current_user(
+    token: Annotated[str, Depends(oauth2_scheme)],
+    db: Annotated[Session, Depends(get_db)],
+) -> CurrentUser:
     creds_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication credentials",
@@ -75,9 +80,21 @@ def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> CurrentUs
         payload = jwt.decode(token, get_settings().api_secret_key, algorithms=[_ALGO])
     except JWTError:
         raise creds_exc
-    if not payload.get("sub"):
+    sub = payload.get("sub")
+    if not sub:
         raise creds_exc
-    return CurrentUser(id=payload["sub"], email=payload.get("email", ""), role=payload.get("role", "viewer"))
+
+    # Re-validate against the live user record. A token is a bearer credential
+    # with a lifetime; trusting its embedded role/status would let a suspended
+    # user — or one whose role was downgraded — keep full access until expiry.
+    # Load the user, reject if missing or not active, and take role from the DB
+    # (not the token) so revocations take effect immediately (docs/06 §1).
+    from app.models.user import User  # local import avoids a circular import
+
+    user = db.get(User, sub)
+    if user is None or user.status != "active":
+        raise creds_exc
+    return CurrentUser(id=str(user.id), email=user.email, role=user.role)
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]

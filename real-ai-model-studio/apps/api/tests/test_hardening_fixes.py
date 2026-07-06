@@ -50,10 +50,18 @@ def auth(client) -> dict:
 
 
 def _any_output(client, auth) -> str:
-    """Grab any existing output id (created by earlier test chains / demo)."""
+    """Grab a non-terminal output id (created by earlier test chains / demo).
+
+    Must not be 'approved'/'delivered': those are terminal states that the
+    selection endpoint now refuses to walk back (no-regress rule), which would
+    make the 'selected' assertion below spuriously 409.
+    """
     with engine.connect() as c:
-        oid = c.execute(text("select id from generation_outputs limit 1")).scalar()
-    assert oid, "expected at least one output in the test DB"
+        oid = c.execute(text(
+            "select id from generation_outputs "
+            "where output_status not in ('approved','delivered') limit 1"
+        )).scalar()
+    assert oid, "expected at least one non-terminal output in the test DB"
     return str(oid)
 
 

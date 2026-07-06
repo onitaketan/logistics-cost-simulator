@@ -185,6 +185,18 @@ function OutputReviewCard({
     }
   }
 
+  async function downloadImage() {
+    onError("");
+    try {
+      // Backend gates this: only approved/delivered outputs yield a signed URL,
+      // and the download is audited server-side.
+      const { download_url } = await api.getOutputDownload(output.id);
+      window.open(resolveFileUrl(download_url), "_blank", "noopener");
+    } catch (e) {
+      onError((e as Error).message);
+    }
+  }
+
   async function submitApproval() {
     onError("");
     try {
@@ -231,6 +243,9 @@ function OutputReviewCard({
               ))}
             </select>
             <button className="small" onClick={applyStatus}>状態を更新</button>
+            {(currentStatus === "approved" || currentStatus === "delivered") && (
+              <button className="small" onClick={downloadImage}>ダウンロード</button>
+            )}
           </div>
 
           {/* Add review */}

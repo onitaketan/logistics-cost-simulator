@@ -11,10 +11,30 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.services.compliance_engine import Status
+from app.services.prompt_filter import screen
 
 
 class GenerationBlocked(Exception):
     """Raised when generation is attempted without a passing compliance check."""
+
+
+def assert_prompt_clean(*texts: str | None) -> None:
+    """Fail-closed prompt screening at the generation boundary (docs/05 §7).
+
+    The compliance check screens the prompt supplied at check time, but the
+    prompt/negative-prompt/revision-prompt actually sent to the engine can differ
+    from it — a passing check must never become a licence to send an arbitrary,
+    unscreened prompt. Re-screen every text that reaches the engine and refuse
+    outright on any prohibited term (minors, explicit nudity, sexual acts,
+    coercion, crime, etc.). Warning terms are NOT blocked here — those are the
+    compliance check's Conditional path — only hard prohibitions.
+    """
+    hits: set[str] = set()
+    for t in texts:
+        hits |= {f for f in screen(t) if f.startswith("prohibited:")}
+    if hits:
+        terms = ", ".join(sorted(h.split(":", 1)[1] for h in hits))
+        raise GenerationBlocked(f"禁止語句が含まれるため生成できません（{terms}）。")
 
 
 @dataclass(frozen=True)

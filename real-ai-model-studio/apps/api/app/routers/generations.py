@@ -66,6 +66,15 @@ def create_generation(
     # missing / mismatched / not ok|conditional; the app-level handler turns that
     # into the consistent 422 envelope.
     gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
+    # Screen the ACTUAL prompt/negative prompt sent to the engine (docs/05 §7).
+    # A passing check must not become a licence to send an unscreened prompt.
+    gen.assert_prompt_clean(body.prompt_text, body.negative_prompt_text)
+
+    # Clamp the batch size to a sane range (1..8): the count drives real engine
+    # cost and downstream review load, and must never be caller-unbounded.
+    params = dict(body.generation_params or {})
+    output_count = max(1, min(int(params.get("output_count", 1) or 1), 8))
+    params["output_count"] = output_count
 
     generation = Generation(
         project_id=body.project_id,
@@ -75,8 +84,8 @@ def create_generation(
         prompt_text=body.prompt_text,
         negative_prompt_text=body.negative_prompt_text,
         prompt_template_id=body.prompt_template_id,
-        generation_params=body.generation_params,
-        output_count=int(body.generation_params.get("output_count", 1)),
+        generation_params=params,
+        output_count=output_count,
         status="queued",
         generated_by=user.id,
     )
@@ -100,7 +109,7 @@ def create_generation(
 def get_generation(
     generation_id: str,
     db: Annotated[Session, Depends(get_db)],
-    user: CurrentUserDep,
+    user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_VIEW))],
 ):
     g = db.get(Generation, generation_id)
     if not g:
@@ -112,7 +121,7 @@ def get_generation(
 def list_outputs(
     generation_id: str,
     db: Annotated[Session, Depends(get_db)],
-    user: CurrentUserDep,
+    user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_VIEW))],
 ):
     rows = db.scalars(
         select(GenerationOutput).where(GenerationOutput.generation_id == generation_id)

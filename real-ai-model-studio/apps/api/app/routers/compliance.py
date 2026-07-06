@@ -26,12 +26,26 @@ from app.services.prompt_filter import screen_with_model_ng
 router = APIRouter(prefix="/projects", tags=["compliance"])
 
 
-def _latest_contract(db: Session, model_id: str) -> ModelContract | None:
-    return db.scalar(
-        select(ModelContract)
-        .where(ModelContract.model_id == model_id)
-        .order_by(ModelContract.contract_end.desc())
-    )
+def _latest_contract(db: Session, model_id: str, today: date) -> ModelContract | None:
+    """Pick the contract that actually governs generation right now.
+
+    Ordering purely by ``contract_end`` DESC would prefer whichever contract ends
+    furthest in the future — which may not be in effect yet, while an in-force
+    contract is ignored. Prefer a contract whose period covers ``today``
+    (``start <= today <= end``), taking the most recently started of those. Only
+    if none is currently in force do we fall back to the latest-ending contract,
+    so the engine still sees a contract to flag as expired (NG) rather than
+    reporting "no contract".
+    """
+    contracts = list(db.scalars(
+        select(ModelContract).where(ModelContract.model_id == model_id)
+    ).all())
+    if not contracts:
+        return None
+    active = [c for c in contracts if c.contract_start <= today <= c.contract_end]
+    if active:
+        return max(active, key=lambda c: c.contract_start)
+    return max(contracts, key=lambda c: c.contract_end)
 
 
 def _permission_for(db: Session, contract_id) -> ModelPermission | None:
@@ -70,7 +84,20 @@ def _screen_and_collect_ng(
           - ng_product matched against the project's product category
     """
     ng_words = {v for (t, v) in rules if t == "ng_word"}
-    flags = screen_with_model_ng(prompt_text, ng_words)
+    # Screen the free-text requirement descriptions alongside the prompt: pose /
+    # expression / scene / background text can carry prohibited or warning terms
+    # even when the prompt field is clean (docs/05 §7/§8). Join them so a single
+    # screen pass covers every author-supplied description that steers the image.
+    screened_text = " ".join(
+        t for t in (
+            prompt_text,
+            requirement.pose_description,
+            requirement.expression_description,
+            requirement.scene_type,
+            requirement.background_description,
+        ) if t
+    )
+    flags = screen_with_model_ng(screened_text, ng_words)
     prompt_flags = {f for f in flags if not f.startswith("ng_word:")}
     hits = {f for f in flags if f.startswith("ng_word:")}
 
@@ -115,7 +142,8 @@ def run_check(
     model = db.get(Model, body.model_id)
     if not model:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
-    contract = _latest_contract(db, body.model_id)
+    today = date.today()
+    contract = _latest_contract(db, body.model_id, today)
     if not contract:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "契約が未登録です。")
     permission = _permission_for(db, contract.id)
@@ -168,7 +196,7 @@ def run_check(
             prompt_flags=prompt_flags,
             model_ng_hits=model_ng_hits,
         ),
-        today=date.today(),
+        today=today,
     )
 
     check = ComplianceCheck(

@@ -56,8 +56,15 @@ def create_permission(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.CONTRACT_MANAGE))],
 ):
-    if not db.get(ModelContract, body.contract_id):
+    contract = db.get(ModelContract, body.contract_id)
+    if not contract:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "契約が存在しません。")
+    # The permission must attach to a contract of the SAME model. Otherwise a
+    # permission row could bind model A's likeness to model B's contract, and the
+    # compliance engine would evaluate generation against the wrong consent scope.
+    if str(contract.model_id) != str(model_id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "契約が指定モデルに属していません。")
     p = ModelPermission(model_id=model_id, **body.model_dump())
     db.add(p)
     db.flush()

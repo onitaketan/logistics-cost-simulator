@@ -47,7 +47,24 @@ class Settings(BaseSettings):
     ai_engine: str = "mock"
     ai_engine_api_key: str | None = None
 
+    def enforce_production_secrets(self) -> None:
+        """Refuse to run outside local with a default/blank signing secret.
+
+        The JWT signing key protects every authenticated call; shipping the
+        placeholder "change-me" to staging/production would let anyone mint a
+        valid admin token. Fail-closed at startup rather than silently trusting
+        forgeable tokens (docs/06 §1).
+        """
+        if self.app_env != "local" and self.api_secret_key in ("", "change-me"):
+            raise RuntimeError(
+                "api_secret_key must be set to a non-default value when "
+                f"app_env='{self.app_env}'. Refusing to start with an insecure "
+                "signing key."
+            )
+
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    settings.enforce_production_secrets()
+    return settings

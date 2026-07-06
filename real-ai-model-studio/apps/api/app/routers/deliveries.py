@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
-from app.models.generation import GenerationOutput
+from app.models.generation import Generation, GenerationOutput
 from app.schemas.common import ok
 from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, DeliveryCreate
 from app.models.workflow import Delivery
@@ -56,6 +56,13 @@ def create_delivery(
     output = db.get(GenerationOutput, body.output_id)
     if not output:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    # Ownership: the output must belong to the project it is being delivered under.
+    # Without this an approved image from project A could be delivered under
+    # project B's (looser) usage scope — a permission-scope escape (docs/05 §9).
+    generation = db.get(Generation, output.generation_id)
+    if generation is None or str(generation.project_id) != str(body.project_id):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "画像が指定案件に属していません。")
     # Delivery is only permitted for approved outputs (post-approval gate).
     if output.output_status not in ("approved", "delivered"):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,

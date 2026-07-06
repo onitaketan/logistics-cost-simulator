@@ -55,6 +55,16 @@ def set_status(
 ):
     o = _get_output(db, output_id)
     before = o.output_status
+    # Selection endpoint must not walk back a terminal approval/delivery state.
+    # 'approved' is reached only through the multi-level approval gate and
+    # 'delivered' only through delivery; regressing them here would silently
+    # invalidate that chain and let an already-delivered asset re-enter review
+    # without a fresh approval (docs/05 §9).
+    if before in ("approved", "delivered"):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "承認済み/納品済みの画像はこの操作で選定ステータスに戻せません。",
+        )
     o.output_status = body.output_status
     db.flush()
     audit_service.record(db, user_id=user.id, action_type="update", target_type="output",
@@ -92,6 +102,9 @@ def revise(
     generation_service.assert_generation_allowed(
         ref, project_id=str(parent.project_id), model_id=str(parent.model_id)
     )
+    # Screen the revision prompt too — a revision must not smuggle in a prohibited
+    # instruction the parent check never saw (docs/05 §7).
+    generation_service.assert_prompt_clean(body.revision_prompt, parent.negative_prompt_text)
 
     params = dict(parent.generation_params or {})
     if body.target_area:
@@ -157,6 +170,27 @@ def add_approval(
                             f"'{body.approval_level}' 承認の権限がありません。")
 
     o = _get_output(db, output_id)
+
+    # Separation of duties (docs/05 §9): the required approval levels (legal /
+    # agency / person …) exist so that DISTINCT parties sign off. Because several
+    # levels share one RBAC permission in the MVP, a single user could otherwise
+    # satisfy multiple levels alone and collapse the multi-party gate. Refuse an
+    # approval when the same user has already recorded a *different* level on this
+    # output.
+    existing = db.scalars(
+        select(Approval).where(Approval.output_id == output_id)
+    ).all()
+    conflict = next(
+        (e for e in existing
+         if str(e.approver_id) == str(user.id) and e.approval_level != body.approval_level),
+        None,
+    )
+    if conflict is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "同一ユーザーが複数の承認レベルを兼任することはできません（職務分掌）。",
+        )
+
     a = Approval(output_id=output_id, approver_id=user.id, **body.model_dump())
     db.add(a)
     db.flush()
@@ -240,13 +274,14 @@ def list_approvals(
 def preview(
     output_id: str,
     db: Annotated[Session, Depends(get_db)],
-    user: Annotated[CurrentUser, Depends(require_review_or_view)],
+    user: Annotated[CurrentUserDep, Depends(require(Perm.REVIEW))],
 ):
     """Short-lived signed URL so a reviewer can SEE a candidate image.
 
     Review必ずしも承認済みではない画像を目視確認する必要がある（docs/05 §10）ため、
-    ダウンロード（承認後のみ）とは別に、閲覧専用の署名URLを許可ロールへ発行する。
-    アクセスは監査ログ(view)に記録される（docs/06 §2「本人データへの全アクセスを記録」）。
+    ダウンロード（承認後のみ）とは別に、閲覧専用の署名URLを発行する。ただし未承認画像の
+    実体（本人の肖像）を閲覧できるのはレビュー権限者に限る — 単なる閲覧ロール(viewer)には
+    許可しない（docs/06 §2）。アクセスは監査ログ(view)に記録される。
     """
     o = _get_output(db, output_id)
     if o.file_path.startswith("mock://"):
