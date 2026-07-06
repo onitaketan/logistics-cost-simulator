@@ -330,6 +330,12 @@ export const api = {
     }),
   listApprovalRequests: (outputId: string) =>
     request<ApprovalRequest[]>(`/outputs/${outputId}/approval-requests`),
+  // Kill a still-pending link (mis-issued / leaked) before it expires.
+  revokeApprovalRequest: (outputId: string, requestId: string) =>
+    request<{ id: string; revoked: boolean }>(
+      `/outputs/${outputId}/approval-requests/${requestId}/revoke`,
+      { method: "POST" },
+    ),
 
   // ---- Generations (list) ----
   listGenerations: (projectId?: string) =>

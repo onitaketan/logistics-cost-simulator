@@ -75,7 +75,7 @@ def update_model(
     user: Annotated[CurrentUserDep, Depends(require(Perm.MODEL_EDIT))],
 ):
     m = db.get(Model, model_id)
-    if not m:
+    if not m or m.deleted_at:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
     before = _out(m)
     for k, v in body.model_dump(exclude_unset=True).items():
@@ -117,7 +117,7 @@ def verify_adult(
     user: Annotated[CurrentUserDep, Depends(require(Perm.CONTRACT_MANAGE))],
 ):
     m = db.get(Model, model_id)
-    if not m:
+    if not m or m.deleted_at:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
     m.adult_verified = body.adult_verified
     m.adult_verified_at = datetime.now(timezone.utc) if body.adult_verified else None

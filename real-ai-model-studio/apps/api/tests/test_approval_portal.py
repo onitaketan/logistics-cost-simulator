@@ -1,12 +1,14 @@
-"""External approval portal (P2-001/P2-002) — verification.
+"""External approval portal (P2-001/P2-002) — verification, incl. review fixes.
 
 Builds a bath scenario whose compliance check requires agency sign-off, issues a
 portal link, and drives the public token endpoints:
-  * an internal legal-level user can issue a link only for a required level;
+  * issuing requires a contact email and a level the check actually requires;
   * the public GET/POST work WITHOUT auth and record an external approval that
     flows through the completeness gate;
-  * links are single-use, and invalid tokens 404;
-  * a viewer cannot issue; issuing an unrequired level is refused.
+  * separation of duties: the internal issuer (accountable for an external link)
+    cannot also record a DIFFERENT level in-system;
+  * links are single-use and revocable; invalid tokens 404;
+  * a reviewer-rejected output cannot be issued a link.
 
 Requires a running Postgres (schema 0003 applied + seed); skips without.
 """
@@ -52,6 +54,16 @@ def auth(client) -> dict:
     return {"Authorization": f"Bearer {r.json()['data']['access_token']}"}
 
 
+def _make_user(client, auth, role: str) -> dict:
+    tag = uuid.uuid4().hex[:8]
+    email = f"{role}{tag}@example.com"
+    client.post("/api/v1/users", headers=auth, json={
+        "name": f"{role}-{tag}", "email": email, "password": "RolePass123", "role": role})
+    tok = client.post("/api/v1/auth/login",
+                      json={"email": email, "password": "RolePass123"}).json()["data"]["access_token"]
+    return {"Authorization": f"Bearer {tok}"}
+
+
 def _build_bath_output(client, auth) -> str:
     """Full chain with a bath requirement -> compliance requires legal+agency.
     Returns an output id in candidate state."""
@@ -94,47 +106,84 @@ def _build_bath_output(client, auth) -> str:
                       headers=auth).json()["data"][0]["id"]
 
 
+def _issue(client, auth, oid, level="agency"):
+    return client.post(f"/api/v1/outputs/{oid}/approval-requests", headers=auth,
+                       json={"level": level, "contact_name": "Agency X",
+                             "contact_email": "agency@example.com"})
+
+
 def test_portal_full_flow(client, auth):
     oid = _build_bath_output(client, auth)
+    legal = _make_user(client, auth, "legal")  # distinct party for the legal level
 
-    # issue an agency link (admin has APPROVE_LEGAL)
-    iss = client.post(f"/api/v1/outputs/{oid}/approval-requests", headers=auth,
-                      json={"level": "agency", "contact_name": "Agency X"})
+    iss = _issue(client, auth, oid, "agency")
     assert iss.status_code == 200, iss.text
     token = iss.json()["data"]["token"]
-    assert iss.json()["data"]["portal_path"].endswith(token)
 
     # public view — NO auth header
-    view = client.get(f"/api/v1/portal/approvals/{token}")
-    assert view.status_code == 200, view.text
-    vd = view.json()["data"]
+    vd = client.get(f"/api/v1/portal/approvals/{token}").json()["data"]
     assert vd["level"] == "agency" and vd["already_decided"] is False
 
     # public decision — NO auth header
     dec = client.post(f"/api/v1/portal/approvals/{token}",
                       json={"decision": "approved", "approver_name": "田中（事務所）"})
     assert dec.status_code == 200, dec.text
-    # legal still missing, so not yet fully approved
-    assert dec.json()["data"]["output_status"] != "approved"
+    assert dec.json()["data"]["output_status"] != "approved"  # legal still missing
 
-    # the external approval is recorded at agency level
     apprs = client.get(f"/api/v1/outputs/{oid}/approvals", headers=auth).json()["data"]
     assert any(a["approval_level"] == "agency" and a["approval_status"] == "approved"
                for a in apprs)
 
-    # single-use: the link cannot be reused
-    again = client.post(f"/api/v1/portal/approvals/{token}", json={"decision": "approved"})
-    assert again.status_code == 409, again.text
+    # single-use: reuse blocked
+    assert client.post(f"/api/v1/portal/approvals/{token}",
+                       json={"decision": "approved"}).status_code == 409
+    # closed link leaks no metadata
+    closed = client.get(f"/api/v1/portal/approvals/{token}").json()["data"]
+    assert closed["already_decided"] is True and closed["level"] is None
 
-    # after legal also approves in-system, the output becomes approved
-    client.post(f"/api/v1/outputs/{oid}/approvals", headers=auth,
+    # a DISTINCT legal user finishes the gate -> approved
+    client.post(f"/api/v1/outputs/{oid}/approvals", headers=legal,
                 json={"approval_level": "legal", "approval_status": "approved"})
-    final = client.get(f"/api/v1/outputs/{oid}/approvals", headers=auth)
-    assert final.status_code == 200
     with engine.connect() as conn:
         st = conn.execute(text("select output_status from generation_outputs where id=:i"),
                           {"i": oid}).scalar()
     assert st == "approved"
+
+
+def test_separation_of_duties_issuer_cannot_also_record_other_level(client, auth):
+    oid = _build_bath_output(client, auth)
+    token = _issue(client, auth, oid, "agency").json()["data"]["token"]
+    client.post(f"/api/v1/portal/approvals/{token}", json={"decision": "approved"})
+    # admin issued+is accountable for the agency approval; recording legal too collapses SoD
+    r = client.post(f"/api/v1/outputs/{oid}/approvals", headers=auth,
+                    json={"approval_level": "legal", "approval_status": "approved"})
+    assert r.status_code == 409, r.text
+
+
+def test_revoke_kills_link(client, auth):
+    oid = _build_bath_output(client, auth)
+    iss = _issue(client, auth, oid, "agency").json()["data"]
+    rid, token = iss["id"], iss["token"]
+    rv = client.post(f"/api/v1/outputs/{oid}/approval-requests/{rid}/revoke", headers=auth)
+    assert rv.status_code == 200, rv.text
+    # revoked link cannot be viewed as open, nor decided
+    assert client.get(f"/api/v1/portal/approvals/{token}").json()["data"]["already_decided"] is True
+    assert client.post(f"/api/v1/portal/approvals/{token}",
+                       json={"decision": "approved"}).status_code == 409
+
+
+def test_issue_requires_email(client, auth):
+    oid = _build_bath_output(client, auth)
+    r = client.post(f"/api/v1/outputs/{oid}/approval-requests", headers=auth,
+                    json={"level": "agency"})  # no contact_email
+    assert r.status_code == 422, r.text
+
+
+def test_rejected_output_cannot_issue(client, auth):
+    oid = _build_bath_output(client, auth)
+    client.patch(f"/api/v1/outputs/{oid}/status", headers=auth, json={"output_status": "rejected"})
+    r = _issue(client, auth, oid, "agency")
+    assert r.status_code == 409, r.text
 
 
 def test_invalid_token_404(client):
@@ -147,18 +196,13 @@ def test_issue_unrequired_level_rejected(client, auth):
     oid = _build_bath_output(client, auth)
     # bath requires legal+agency, NOT person
     r = client.post(f"/api/v1/outputs/{oid}/approval-requests", headers=auth,
-                    json={"level": "person"})
+                    json={"level": "person", "contact_email": "p@example.com"})
     assert r.status_code == 422, r.text
 
 
 def test_viewer_cannot_issue(client, auth):
     oid = _build_bath_output(client, auth)
-    tag = uuid.uuid4().hex[:6]
-    client.post("/api/v1/users", headers=auth, json={
-        "name": f"v{tag}", "email": f"v{tag}@example.com",
-        "password": "ViewerPass123", "role": "viewer"})
-    vtok = client.post("/api/v1/auth/login", json={
-        "email": f"v{tag}@example.com", "password": "ViewerPass123"}).json()["data"]["access_token"]
-    r = client.post(f"/api/v1/outputs/{oid}/approval-requests",
-                    headers={"Authorization": f"Bearer {vtok}"}, json={"level": "agency"})
+    vauth = _make_user(client, auth, "viewer")
+    r = client.post(f"/api/v1/outputs/{oid}/approval-requests", headers=vauth,
+                    json={"level": "agency", "contact_email": "a@example.com"})
     assert r.status_code == 403, r.text

@@ -167,7 +167,7 @@ export interface ApprovalItem {
 export interface ApprovalRequest {
   id: string;
   level: "agency" | "person";
-  status: string; // pending | approved | conditional | rejected | expired
+  status: string; // pending | decided | revoked
   contact_name: string | null;
   contact_email: string | null;
   expires_at: string;
@@ -178,11 +178,11 @@ export interface ApprovalRequest {
 // GET /portal/approvals/{token} — UNAUTHENTICATED view the external approver sees.
 // No session; the token IS the credential. preview_url is a signed, short-lived URL.
 export interface PortalApprovalView {
-  level: string; // agency | person
-  output_id: string;
+  level: string | null; // agency | person; null once the link is closed/expired
+  output_id: string | null; // null once closed (no metadata leak on a dead link)
   preview_url: string | null;
   project_name: string;
-  status: string; // pending | approved | conditional | rejected | expired
+  status: string; // pending | decided | revoked
   expires_at: string;
   already_decided: boolean;
 }

@@ -249,12 +249,18 @@ class ApprovalRequestCreate(BaseModel):
     # delegated outward; internal/legal/admin stay in-system.
     level: Literal["agency", "person"]
     contact_name: str | None = None
-    contact_email: EmailStr | None = None
+    # Required: a link must name the verified recipient it is issued to, so the
+    # audit trail ties the out-of-band delivery to an accountable contact.
+    contact_email: EmailStr
     expires_in_days: int = Field(default=7, ge=1, le=90)
 
 
 class PortalDecision(BaseModel):
-    decision: Literal["approved", "conditional", "rejected"]
+    # Binary sign-off only. A 'conditional' would consume the single-use link
+    # while the completeness gate ignores it (it counts neither as approved nor
+    # as a block) — a silent no-op. External parties approve or reject; nuanced
+    # conditions go through the internal review/approval flow.
+    decision: Literal["approved", "rejected"]
     comment: str | None = None
     approver_name: str | None = None
 

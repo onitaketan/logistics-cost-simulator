@@ -69,7 +69,7 @@ def create_template(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.GENERATE))],
 ):
-    _reject_prohibited(body.body, body.negative_body)
+    _reject_prohibited(body.name, body.body, body.negative_body)
     t = PromptTemplate(**body.model_dump())
     db.add(t)
     db.flush()
@@ -104,7 +104,8 @@ def update_template(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "テンプレートが見つかりません。")
     changes = body.model_dump(exclude_unset=True)
     # Re-screen the resulting body/negative even if only one field changed.
-    _reject_prohibited(changes.get("body", t.body), changes.get("negative_body", t.negative_body))
+    _reject_prohibited(changes.get("name", t.name), changes.get("body", t.body),
+                       changes.get("negative_body", t.negative_body))
     for k, v in changes.items():
         setattr(t, k, v)
     db.flush()

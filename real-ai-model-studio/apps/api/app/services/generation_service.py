@@ -104,10 +104,18 @@ def revalidate_before_run(db, generation_id) -> None:
     from datetime import date
 
     from app.models.generation import ComplianceCheck, Generation
+    from app.models.model import Model
 
     generation = db.get(Generation, generation_id)
     if generation is None:
         raise GenerationBlocked("生成ジョブが見つかりません。")
+
+    # Execution-time consent gate: if the model was soft-deleted (consent
+    # withdrawn / takedown) after enqueue, refuse — even a previously-passing
+    # check must not keep producing that person's likeness.
+    model = db.get(Model, generation.model_id)
+    if model is None or model.deleted_at is not None:
+        raise GenerationBlocked("モデルが削除されているため生成できません。")
 
     check = db.get(ComplianceCheck, generation.compliance_check_id)
     if check is None:

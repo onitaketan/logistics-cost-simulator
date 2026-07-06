@@ -265,3 +265,49 @@ def test_preview_denied_to_viewer(client, auth):
     vauth = {"Authorization": f"Bearer {vtok}"}
     r = client.get(f"/api/v1/outputs/{oid}/preview", headers=vauth)
     assert r.status_code == 403, r.text
+
+
+@db_only
+def test_soft_deleted_model_blocks_generation_and_mutation(client, auth):
+    """Consent-withdrawal path: after a model is soft-deleted, it must not be
+    generatable, re-checkable, editable, verifiable, or assignable."""
+    pid, mid, check_id = _build_chain(client, auth)
+    # delete the model (soft)
+    d = client.delete(f"/api/v1/models/{mid}", headers=auth)
+    assert d.status_code == 200, d.text
+
+    # generation against the pre-existing passing check is refused
+    g = client.post("/api/v1/generations", headers=auth, json={
+        "project_id": pid, "model_id": mid, "compliance_check_id": check_id,
+        "prompt_text": "上品な背景で商品を持つ",
+        "generation_params": {"output_count": 1, "width": 512, "height": 512},
+    })
+    assert g.status_code == 404, g.text
+
+    # a fresh compliance check is refused
+    c = client.post(f"/api/v1/projects/{pid}/compliance-check", headers=auth,
+                    json={"model_id": mid, "prompt_text": "x"})
+    assert c.status_code == 404, c.text
+
+    # update / adult-verification / assignment all refuse
+    assert client.patch(f"/api/v1/models/{mid}", headers=auth,
+                        json={"stage_name": "new"}).status_code == 404
+    assert client.post(f"/api/v1/models/{mid}/adult-verification", headers=auth,
+                       json={"adult_verified": True}).status_code == 404
+    assert client.post(f"/api/v1/projects/{pid}/models", headers=auth,
+                       json={"model_id": mid, "usage_role": "main"}).status_code == 404
+
+
+@db_only
+def test_bad_output_count_does_not_500(client, auth):
+    """A non-numeric output_count must not raise a raw 400/500 — it clamps to 1."""
+    pid, mid, check_id = _build_chain(client, auth)
+    r = client.post("/api/v1/generations", headers=auth, json={
+        "project_id": pid, "model_id": mid, "compliance_check_id": check_id,
+        "prompt_text": "上品な背景で商品を持つ",
+        "generation_params": {"output_count": "abc", "width": 512, "height": 512},
+    })
+    assert r.status_code == 200, r.text
+    gid = r.json()["data"]["generation_id"]
+    g = client.get(f"/api/v1/generations/{gid}", headers=auth).json()["data"]
+    assert g["output_count"] == 1

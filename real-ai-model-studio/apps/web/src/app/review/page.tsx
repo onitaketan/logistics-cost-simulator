@@ -167,13 +167,17 @@ function OutputReviewCard({
 
   async function issueLink() {
     onError("");
+    if (!contactEmail.trim()) {
+      onError("送付先メールアドレスを入力してください（発行の記録に必要です）。");
+      return;
+    }
     setIssuedUrl(null);
     setIssueBusy(true);
     try {
       const r = await api.issueApprovalRequest(output.id, {
         level: linkLevel,
         contact_name: contactName || undefined,
-        contact_email: contactEmail || undefined,
+        contact_email: contactEmail,
       });
       setIssuedUrl(window.location.origin + r.portal_path);
       setNotice("外部承認リンクを発行しました。");
@@ -184,6 +188,18 @@ function OutputReviewCard({
       onError((e as Error).message);
     } finally {
       setIssueBusy(false);
+    }
+  }
+
+  async function revokeLink(requestId: string) {
+    onError("");
+    if (!window.confirm("この承認リンクを取り消します。よろしいですか？")) return;
+    try {
+      await api.revokeApprovalRequest(output.id, requestId);
+      setNotice("承認リンクを取り消しました。");
+      loadApprovalRequests();
+    } catch (e) {
+      onError((e as Error).message);
     }
   }
 
@@ -408,7 +424,9 @@ function OutputReviewCard({
                 style={{ padding: 6, minWidth: 140 }}
               />
               <input
-                placeholder="メール（任意）"
+                type="email"
+                required
+                placeholder="送付先メール（必須）"
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
                 style={{ padding: 6, minWidth: 160 }}
@@ -446,6 +464,7 @@ function OutputReviewCard({
                       <th>状態</th>
                       <th>宛先</th>
                       <th>有効期限</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -455,6 +474,15 @@ function OutputReviewCard({
                         <td>{r.status}</td>
                         <td>{r.contact_name ?? r.contact_email ?? "—"}</td>
                         <td>{r.expires_at?.slice(0, 10)}</td>
+                        <td>
+                          {r.status === "pending" ? (
+                            <button className="ghost small" onClick={() => revokeLink(r.id)}>
+                              取消
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

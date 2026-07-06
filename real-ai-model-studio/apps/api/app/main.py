@@ -5,6 +5,8 @@ gating live in services; routers only orchestrate. Importing app.models register
 all tables on Base.metadata.
 """
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,6 +35,8 @@ from app.routers import (
     users,
 )
 from app.services.generation_service import GenerationBlocked
+
+_logger = logging.getLogger("rams.api")
 
 app = FastAPI(
     title="Real AI Model Studio API",
@@ -108,16 +112,14 @@ async def _validation_handler(_request, exc: RequestValidationError):
     return _envelope(422, "validation_error", message)
 
 
-@app.exception_handler(ValueError)
-async def _value_error_handler(_request, exc: ValueError):
-    # Domain guards raise bare ValueError (e.g. unknown AI adapter). Surface as a
-    # 400 envelope instead of an opaque 500.
-    return _envelope(400, "invalid_request", str(exc) or "不正なリクエストです。")
-
-
 @app.exception_handler(Exception)
-async def _unhandled_handler(_request, exc: Exception):
-    # Last-resort: never leak a stack trace or raw string to the client.
+async def _unhandled_handler(request, exc: Exception):
+    # Last-resort: never leak a stack trace or raw string to the client. Log the
+    # full traceback with request context so a user-reported 500 is traceable
+    # (auditability). Note: we deliberately do NOT register a broad ValueError
+    # handler — pydantic's ValidationError subclasses ValueError, so catching it
+    # would both leak field/input details and mask genuine 5xx bugs as 400s.
+    _logger.exception("unhandled error on %s %s", request.method, request.url.path)
     return _envelope(500, "internal_error", "サーバー内部エラーが発生しました。")
 
 

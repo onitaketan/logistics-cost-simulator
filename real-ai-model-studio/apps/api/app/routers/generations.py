@@ -15,6 +15,7 @@ from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
 from app.models.generation import ComplianceCheck, Generation, GenerationOutput
+from app.models.model import Model
 from app.schemas.common import ok
 from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT, GenerationCreate
 from app.services import generation_service as gen
@@ -66,14 +67,25 @@ def create_generation(
     # missing / mismatched / not ok|conditional; the app-level handler turns that
     # into the consistent 422 envelope.
     gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
+    # Consent gate: never generate against a soft-deleted model (defense in depth;
+    # the worker re-checks this at execution time too).
+    model = db.get(Model, body.model_id)
+    if model is None or model.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
     # Screen the ACTUAL prompt/negative prompt sent to the engine (docs/05 §7).
     # A passing check must not become a licence to send an unscreened prompt.
     gen.assert_prompt_clean(body.prompt_text, body.negative_prompt_text)
 
     # Clamp the batch size to a sane range (1..8): the count drives real engine
     # cost and downstream review load, and must never be caller-unbounded.
+    # Coerce defensively — a non-numeric output_count falls back to 1 rather than
+    # raising (which would surface as an inconsistent 400/500).
     params = dict(body.generation_params or {})
-    output_count = max(1, min(int(params.get("output_count", 1) or 1), 8))
+    try:
+        requested = int(params.get("output_count", 1))
+    except (TypeError, ValueError):
+        requested = 1
+    output_count = max(1, min(requested, 8))
     params["output_count"] = output_count
 
     generation = Generation(

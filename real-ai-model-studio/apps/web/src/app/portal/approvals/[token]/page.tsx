@@ -16,9 +16,10 @@ const LEVEL_LABELS: Record<string, string> = {
   person: "本人",
 };
 
-const DECISIONS: { value: "approved" | "conditional" | "rejected"; label: string }[] = [
+// Binary sign-off: the backend records only approved/rejected for external
+// parties (a 'conditional' would burn the single-use link without counting).
+const DECISIONS: { value: "approved" | "rejected"; label: string }[] = [
   { value: "approved", label: "承認" },
-  { value: "conditional", label: "条件付き" },
   { value: "rejected", label: "却下" },
 ];
 
@@ -31,7 +32,7 @@ export default function PortalApprovalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [decision, setDecision] = useState<"approved" | "conditional" | "rejected">("approved");
+  const [decision, setDecision] = useState<"approved" | "rejected">("approved");
   const [comment, setComment] = useState("");
   const [approverName, setApproverName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -72,7 +73,7 @@ export default function PortalApprovalPage() {
     }
   }
 
-  const levelLabel = view ? LEVEL_LABELS[view.level] ?? view.level : "";
+  const levelLabel = view?.level ? LEVEL_LABELS[view.level] ?? view.level : "";
   // Closed = the request is no longer awaiting a decision (already recorded or
   // expired). We also treat a just-submitted decision (done) as closed.
   const closed = !!view && (view.already_decided || view.status !== "pending");
@@ -170,7 +171,7 @@ export default function PortalApprovalPage() {
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
                     rows={3}
-                    placeholder="条件付き承認の条件やご意見があればご記入ください"
+                    placeholder="条件やご意見があればご記入ください"
                   />
                 </label>
 

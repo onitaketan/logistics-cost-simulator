@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
+from app.models.model import Model
 from app.models.project import Project, ProjectModel, ProjectRequirement
 from app.schemas.common import ok
 from app.schemas.dto import (
@@ -115,7 +116,8 @@ def set_requirements(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_EDIT))],
 ):
-    if not db.get(Project, project_id):
+    proj = db.get(Project, project_id)
+    if not proj or proj.deleted_at:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "案件が見つかりません。")
     r = ProjectRequirement(project_id=project_id, **body.model_dump())
     db.add(r)
@@ -133,6 +135,12 @@ def assign_model(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_EDIT))],
 ):
+    proj = db.get(Project, project_id)
+    if not proj or proj.deleted_at:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "案件が見つかりません。")
+    model = db.get(Model, body.model_id)
+    if not model or model.deleted_at:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
     pm = ProjectModel(project_id=project_id, model_id=body.model_id, usage_role=body.usage_role)
     db.add(pm)
     db.flush()

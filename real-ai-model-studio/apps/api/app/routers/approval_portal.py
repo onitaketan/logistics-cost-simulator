@@ -60,8 +60,13 @@ def issue_request(
     output = db.get(GenerationOutput, output_id)
     if not output:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
-    if output.output_status in ("approved", "delivered"):
-        raise HTTPException(status.HTTP_409_CONFLICT, "既に承認/納品済みの画像です。")
+    # A link only makes sense for an output still open for approval. Refuse when
+    # already approved/delivered OR reviewer-rejected — otherwise an external
+    # 'approved' could resurrect a rejected asset (recompute has no rejected
+    # Approval row to block on).
+    if output.output_status not in ("candidate", "selected"):
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "この画像は承認受付状態ではありません。")
     # Only issue a link for a level this output's compliance check actually
     # requires — an unrequested external sign-off has no meaning (docs/05 §9).
     if body.level not in _required_levels(db, output):
@@ -100,6 +105,29 @@ def list_requests(
     return ok([_request_out(r) for r in rows])
 
 
+@router.post("/outputs/{output_id}/approval-requests/{request_id}/revoke")
+def revoke_request(
+    output_id: str,
+    request_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    user: Annotated[CurrentUserDep, Depends(require(Perm.APPROVE_LEGAL))],
+):
+    """Kill a still-pending link (mis-issued / leaked / wrong recipient) before it
+    expires. A decided link cannot be revoked (the decision already stands)."""
+    ar = db.get(ApprovalRequest, request_id)
+    if not ar or str(ar.output_id) != str(output_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "承認リンクが見つかりません。")
+    if ar.status != "pending":
+        raise HTTPException(status.HTTP_409_CONFLICT, "決定済み/失効済みのリンクは取り消せません。")
+    ar.status = "revoked"
+    db.flush()
+    audit_service.record(db, user_id=user.id, action_type="update",
+                         target_type="approval_request", target_id=request_id,
+                         after={"status": "revoked"})
+    db.commit()
+    return ok({"id": request_id, "revoked": True})
+
+
 # ---- Public: token-scoped portal (NO auth) ----
 
 @router.get("/portal/approvals/{token}")
@@ -107,18 +135,30 @@ def portal_view(token: str, db: Annotated[Session, Depends(get_db)]):
     ar = approval_portal.resolve(db, token)
     if not ar:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "リンクが無効です。")
+    open_ = approval_portal.is_open(ar)
+
+    # Record every resolved-token view (open, closed, expired, or mock) — all
+    # access to the person's image/context must be auditable (CLAUDE.md #5).
+    audit_service.record(db, user_id=None, action_type="view",
+                         target_type="approval_request", target_id=str(ar.id),
+                         after={"purpose": "portal_view", "open": open_})
+    db.commit()
+
+    # A closed/expired link discloses nothing beyond that it is closed — no
+    # project name, output id, or preview (defence in depth; the token holder
+    # already had it, but a dead link should not keep leaking internal naming).
+    if not open_:
+        return ok({"level": None, "output_id": None, "preview_url": None,
+                   "project_name": "", "status": ar.status,
+                   "expires_at": ar.expires_at.isoformat() if ar.expires_at else None,
+                   "already_decided": True})
+
     output = db.get(GenerationOutput, ar.output_id)
     generation = db.get(Generation, output.generation_id) if output else None
     project = db.get(Project, generation.project_id) if generation else None
-
-    open_ = approval_portal.is_open(ar)
     preview = None
-    if open_ and output and not output.file_path.startswith("mock://"):
+    if output and not output.file_path.startswith("mock://"):
         preview = signed_url(output.file_path)
-        audit_service.record(db, user_id=None, action_type="view",
-                             target_type="approval_request", target_id=str(ar.id),
-                             after={"purpose": "portal_view"})
-        db.commit()
     return ok({
         "level": ar.level,
         "output_id": str(ar.output_id),
@@ -126,7 +166,7 @@ def portal_view(token: str, db: Annotated[Session, Depends(get_db)]):
         "project_name": project.project_name if project else "",
         "status": ar.status,
         "expires_at": ar.expires_at.isoformat() if ar.expires_at else None,
-        "already_decided": not open_,
+        "already_decided": False,
     })
 
 
@@ -135,18 +175,40 @@ def portal_decide(token: str, body: PortalDecision, db: Annotated[Session, Depen
     ar = approval_portal.resolve(db, token)
     if not ar:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "リンクが無効です。")
-    if not approval_portal.is_open(ar):
-        raise HTTPException(status.HTTP_409_CONFLICT, "このリンクは既に使用済みか期限切れです。")
 
-    output = db.get(GenerationOutput, ar.output_id)
+    # Serialize ALL approval writes on this output so single-use, the state
+    # machine, and the separation-of-duties check are race-free (row lock).
+    output = db.execute(
+        select(GenerationOutput).where(GenerationOutput.id == ar.output_id).with_for_update()
+    ).scalar_one_or_none()
     if not output:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    db.refresh(ar)  # fresh status under the lock (a peer decision may have landed)
+
+    if not approval_portal.is_open(ar):
+        raise HTTPException(status.HTTP_409_CONFLICT, "このリンクは既に使用済みか期限切れです。")
+    if output.output_status not in ("candidate", "selected"):
+        raise HTTPException(status.HTTP_409_CONFLICT, "この画像は承認受付状態ではありません。")
+
+    # Separation of duties (docs/05 §9): the external approval is accountable to
+    # the internal user who issued the link (created_by). Refuse if that same
+    # internal actor is already responsible for a DIFFERENT level on this output
+    # — whether recorded in-system or via another external link. This prevents a
+    # single internal user from single-handedly satisfying a multi-party gate.
+    if ar.created_by is not None:
+        others = db.scalars(select(Approval).where(Approval.output_id == ar.output_id)).all()
+        if any(str(a.approver_id) == str(ar.created_by) and a.approval_level != ar.level
+               for a in others):
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "同一の発行者が複数の承認レベルを担うことはできません（職務分掌）。",
+            )
 
     who = (body.approver_name or ar.contact_name or "external").strip()
     comment = f"[外部承認:{who}] {body.comment or ''}".strip()
-    # External approval: approver_id is NULL by design; identity is captured in the
-    # request row + comment. Flows through the same completeness gate.
-    db.add(Approval(output_id=str(ar.output_id), approver_id=None,
+    # approver_id = the accountable internal issuer (NOT NULL) so the shared SoD
+    # rule sees external rows too; the external human's name is in approver_name.
+    db.add(Approval(output_id=str(ar.output_id), approver_id=ar.created_by,
                     approval_level=ar.level, approval_status=body.decision,
                     approval_comment=comment))
     ar.status = "decided"

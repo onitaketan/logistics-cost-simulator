@@ -140,7 +140,9 @@ def run_check(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "案件要件が未登録です。")
 
     model = db.get(Model, body.model_id)
-    if not model:
+    if not model or model.deleted_at:
+        # A soft-deleted model (e.g. consent withdrawn) must not pass compliance,
+        # so no fresh passing check — and therefore no generation — can reference it.
         raise HTTPException(status.HTTP_404_NOT_FOUND, "モデルが見つかりません。")
     today = date.today()
     contract = _latest_contract(db, body.model_id, today)

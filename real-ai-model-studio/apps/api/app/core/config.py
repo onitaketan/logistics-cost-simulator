@@ -13,8 +13,11 @@ _API_DIR = _CORE.parents[2]     # …/real-ai-model-studio/apps/api
 
 
 class Settings(BaseSettings):
+    # pydantic-settings gives LATER files higher precedence, so the repo-root
+    # .env (the canonical one) is listed LAST and wins over a stray CWD/apps-api
+    # .env — avoiding a silent override of e.g. api_secret_key.
     model_config = SettingsConfigDict(
-        env_file=(str(_REPO_ROOT / ".env"), str(_API_DIR / ".env"), ".env"),
+        env_file=(".env", str(_API_DIR / ".env"), str(_REPO_ROOT / ".env")),
         extra="ignore",
     )
 
