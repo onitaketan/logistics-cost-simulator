@@ -15,6 +15,7 @@ import {
   EXPOSURE_LEVELS,
 } from "@rams/shared-types";
 import type { ComplianceResult, Model, Project } from "@rams/shared-types";
+import type { ProjectMember } from "@/types";
 
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
@@ -38,14 +39,56 @@ export default function ProjectDetailPage() {
   const [training, setTraining] = useState(false);
   const [result, setResult] = useState<ComplianceResult | null>(null);
 
+  // project members
+  const [members, setMembers] = useState<ProjectMember[]>([]);
+  const [memberEmail, setMemberEmail] = useState("");
+  const [memberBusy, setMemberBusy] = useState(false);
+
   const loadProject = useCallback(() => {
     api.getProject(id).then(setProject).catch((e) => setError((e as Error).message));
+  }, [id]);
+  const loadMembers = useCallback(() => {
+    api.listProjectMembers(id).then(setMembers).catch((e) => {
+      setMembers([]);
+      setError((e as Error).message);
+    });
   }, [id]);
 
   useEffect(() => {
     loadProject();
+    loadMembers();
     api.listModels().then(setModels).catch(() => setModels([]));
-  }, [id, loadProject]);
+  }, [id, loadProject, loadMembers]);
+
+  async function addMember(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    setMemberBusy(true);
+    try {
+      await api.addProjectMember(id, { email: memberEmail });
+      setMemberEmail("");
+      setNotice("メンバーを追加しました。");
+      loadMembers();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setMemberBusy(false);
+    }
+  }
+
+  async function removeMember(member: ProjectMember) {
+    if (!window.confirm(`${member.name ?? member.email ?? "このメンバー"}を案件から外しますか？`)) return;
+    setError(null);
+    setNotice(null);
+    try {
+      await api.removeProjectMember(id, member.user_id);
+      setNotice("メンバーを削除しました。");
+      loadMembers();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function addRequirements(e: React.FormEvent) {
     e.preventDefault();
@@ -239,6 +282,52 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>メンバー</h3>
+        <table>
+          <thead>
+            <tr><th>氏名</th><th>メール</th><th>役割</th><th></th></tr>
+          </thead>
+          <tbody>
+            {members.map((m) => (
+              <tr key={m.id}>
+                <td>
+                  {m.name ?? "—"}
+                  {m.is_owner && <span className="badge ok" style={{ marginLeft: 8 }}>オーナー</span>}
+                </td>
+                <td>{m.email ?? "—"}</td>
+                <td>{m.role_in_project ?? "—"}</td>
+                <td>
+                  {!m.is_owner && (
+                    <button className="ghost small" onClick={() => removeMember(m)}>削除</button>
+                  )}
+                </td>
+              </tr>
+            ))}
+            {members.length === 0 && (
+              <tr><td colSpan={4} className="muted">メンバーがいません。</td></tr>
+            )}
+          </tbody>
+        </table>
+
+        <form onSubmit={addMember} style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <input
+            type="email"
+            value={memberEmail}
+            onChange={(e) => setMemberEmail(e.target.value)}
+            placeholder="member@example.com"
+            required
+            style={{ flex: 1 }}
+          />
+          <button type="submit" disabled={memberBusy || !memberEmail}>
+            {memberBusy ? "追加中…" : "追加"}
+          </button>
+        </form>
+        <p className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+          メンバーに追加すると、その担当者はこの案件の生成・レビュー・納品にアクセスできます。オーナーと管理者のみが編集できます。
+        </p>
       </div>
     </div>
   );

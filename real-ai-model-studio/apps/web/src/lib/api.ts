@@ -23,6 +23,7 @@ import type {
   Output,
   Permission,
   PortalApprovalView,
+  ProjectMember,
   PromptTemplate,
   ReviewItem,
   User,
@@ -162,7 +163,8 @@ export interface IssueApprovalRequestPayload {
 }
 
 export interface SubmitPortalApprovalPayload {
-  decision: "approved" | "conditional" | "rejected";
+  // Binary sign-off only (backend rejects 'conditional' for external parties).
+  decision: "approved" | "rejected";
   comment?: string;
   approver_name?: string;
 }
@@ -262,6 +264,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ model_id, usage_role }),
     }),
+
+  // ---- Project members ----
+  // The owner (or admin) manages who can access a project. Authorization is
+  // enforced server-side; a 403 surfaces as the standard permission message.
+  listProjectMembers: (projectId: string) =>
+    request<ProjectMember[]>(`/projects/${projectId}/members`),
+  addProjectMember: (
+    projectId: string,
+    payload: { email?: string; user_id?: string },
+  ) =>
+    request<{ id: string; user_id: string }>(`/projects/${projectId}/members`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  removeProjectMember: (projectId: string, userId: string) =>
+    request<{ removed: boolean; user_id: string }>(
+      `/projects/${projectId}/members/${userId}`,
+      { method: "DELETE" },
+    ),
 
   // ---- Compliance ----
   runComplianceCheck: (

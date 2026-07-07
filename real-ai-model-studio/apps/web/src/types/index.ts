@@ -187,6 +187,17 @@ export interface PortalApprovalView {
   already_decided: boolean;
 }
 
+// GET /projects/{id}/members — members with access to a project. The owner (or an
+// admin) manages this list; a member may generate/review/deliver within the project.
+export interface ProjectMember {
+  id: string;
+  user_id: string;
+  role_in_project: string | null;
+  name: string | null;
+  email: string | null;
+  is_owner: boolean;
+}
+
 // GET /prompt-templates — reusable prompt templates (P1-004)
 export interface PromptTemplate {
   id: string;

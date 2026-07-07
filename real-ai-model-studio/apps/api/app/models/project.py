@@ -49,6 +49,21 @@ class ProjectRequirement(Base):
     legal_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class ProjectMember(Base):
+    """Which users may act on a project (data-scoped auth, migration 0004).
+
+    admin/legal are system-wide and are NOT gated by this table; for everyone
+    else, access = owner OR a row here."""
+
+    __tablename__ = "project_members"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id"))
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    role_in_project: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class ProjectModel(Base):
     __tablename__ = "project_models"
 

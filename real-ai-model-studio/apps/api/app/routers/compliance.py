@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from app.core.access import assert_project_access
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
@@ -133,6 +134,7 @@ def run_check(
     project = db.get(Project, project_id)
     if not project:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "案件が見つかりません。")
+    assert_project_access(db, user, project_id)
     requirement = db.scalar(
         select(ProjectRequirement).where(ProjectRequirement.project_id == project_id)
     )

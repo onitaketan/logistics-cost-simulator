@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.access import assert_project_access
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
@@ -33,6 +34,12 @@ def _required_levels(db: Session, output: GenerationOutput) -> list[str]:
     generation = db.get(Generation, output.generation_id)
     check = db.get(ComplianceCheck, generation.compliance_check_id) if generation else None
     return list(check.required_approvals or []) if check else []
+
+
+def _assert_output_project_access(db: Session, user, output: GenerationOutput) -> None:
+    generation = db.get(Generation, output.generation_id)
+    if generation is not None:
+        assert_project_access(db, user, generation.project_id)
 
 
 def _request_out(ar: ApprovalRequest) -> dict:
@@ -60,6 +67,7 @@ def issue_request(
     output = db.get(GenerationOutput, output_id)
     if not output:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    _assert_output_project_access(db, user, output)
     # A link only makes sense for an output still open for approval. Refuse when
     # already approved/delivered OR reviewer-rejected — otherwise an external
     # 'approved' could resurrect a rejected asset (recompute has no rejected
@@ -97,6 +105,10 @@ def list_requests(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.REVIEW))],
 ):
+    output = db.get(GenerationOutput, output_id)
+    if not output:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    _assert_output_project_access(db, user, output)
     rows = db.scalars(
         select(ApprovalRequest)
         .where(ApprovalRequest.output_id == output_id)
@@ -117,6 +129,9 @@ def revoke_request(
     ar = db.get(ApprovalRequest, request_id)
     if not ar or str(ar.output_id) != str(output_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "承認リンクが見つかりません。")
+    output = db.get(GenerationOutput, ar.output_id)
+    if output is not None:
+        _assert_output_project_access(db, user, output)
     if ar.status != "pending":
         raise HTTPException(status.HTTP_409_CONFLICT, "決定済み/失効済みのリンクは取り消せません。")
     ar.status = "revoked"

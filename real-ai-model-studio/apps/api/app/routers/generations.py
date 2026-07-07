@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.access import accessible_project_ids, assert_project_access
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
@@ -33,7 +34,15 @@ def list_generations(
 ):
     stmt = select(Generation)
     if project_id:
+        assert_project_access(db, user, project_id)
         stmt = stmt.where(Generation.project_id == project_id)
+    else:
+        # Data scope: non-global roles see only generations of accessible projects.
+        allowed = accessible_project_ids(db, user)
+        if allowed is not None:
+            if not allowed:
+                return ok([])
+            stmt = stmt.where(Generation.project_id.in_(allowed))
     stmt = stmt.order_by(Generation.generated_at.desc()).limit(limit).offset(offset)
     rows = db.scalars(stmt).all()
     return ok([
@@ -67,6 +76,8 @@ def create_generation(
     # missing / mismatched / not ok|conditional; the app-level handler turns that
     # into the consistent 422 envelope.
     gen.assert_generation_allowed(ref, project_id=body.project_id, model_id=body.model_id)
+    # Data scope: the caller must have access to the target project.
+    assert_project_access(db, user, body.project_id)
     # Consent gate: never generate against a soft-deleted model (defense in depth;
     # the worker re-checks this at execution time too).
     model = db.get(Model, body.model_id)
@@ -126,6 +137,7 @@ def get_generation(
     g = db.get(Generation, generation_id)
     if not g:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "生成ジョブが見つかりません。")
+    assert_project_access(db, user, g.project_id)
     return ok({"id": str(g.id), "status": g.status, "output_count": g.output_count})
 
 
@@ -135,6 +147,10 @@ def list_outputs(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.PROJECT_VIEW))],
 ):
+    g = db.get(Generation, generation_id)
+    if not g:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "生成ジョブが見つかりません。")
+    assert_project_access(db, user, g.project_id)
     rows = db.scalars(
         select(GenerationOutput).where(GenerationOutput.generation_id == generation_id)
     ).all()

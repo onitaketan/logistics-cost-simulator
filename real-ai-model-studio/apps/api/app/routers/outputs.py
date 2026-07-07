@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.access import assert_project_access
 from app.core.rbac import Perm, has_permission
 from app.core.security import CurrentUser, CurrentUserDep, require
 from app.db.session import get_db
@@ -39,6 +40,13 @@ def _get_output(db: Session, output_id: str) -> GenerationOutput:
     return o
 
 
+def _assert_output_access(db: Session, user, o: GenerationOutput) -> None:
+    """Data scope: the caller must have access to the output's project."""
+    generation = db.get(Generation, o.generation_id)
+    if generation is not None:
+        assert_project_access(db, user, generation.project_id)
+
+
 def require_review_or_view(user: CurrentUserDep) -> CurrentUser:
     """Read access to reviews/approvals: reviewers or anyone who can view models."""
     if has_permission(user.role, Perm.REVIEW) or has_permission(user.role, Perm.MODEL_VIEW):
@@ -57,6 +65,7 @@ def set_status(
     user: Annotated[CurrentUserDep, Depends(require(Perm.REVIEW))],
 ):
     o = _get_output(db, output_id)
+    _assert_output_access(db, user, o)
     before = o.output_status
     # Selection endpoint must not walk back a terminal approval/delivery state.
     # 'approved' is reached only through the multi-level approval gate and
@@ -90,6 +99,7 @@ def revise(
     from app.services.generation_service import ComplianceCheckRef
 
     o = _get_output(db, output_id)
+    _assert_output_access(db, user, o)
     parent = db.get(Generation, o.generation_id)
     if parent is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "元の生成ジョブが見つかりません。")
@@ -149,7 +159,7 @@ def add_review(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.REVIEW))],
 ):
-    _get_output(db, output_id)
+    _assert_output_access(db, user, _get_output(db, output_id))
     r = OutputReview(output_id=output_id, reviewer_id=user.id, **body.model_dump())
     db.add(r)
     db.flush()
@@ -173,6 +183,7 @@ def add_approval(
                             f"'{body.approval_level}' 承認の権限がありません。")
 
     o = _get_output(db, output_id)
+    _assert_output_access(db, user, o)
 
     # Separation of duties (docs/05 §9): the required approval levels (legal /
     # agency / person …) exist so that DISTINCT parties sign off. Because several
@@ -272,6 +283,7 @@ def preview(
     許可しない（docs/06 §2）。アクセスは監査ログ(view)に記録される。
     """
     o = _get_output(db, output_id)
+    _assert_output_access(db, user, o)
     if o.file_path.startswith("mock://"):
         # Mock engine outputs have no stored bytes — nothing to preview.
         return ok({"preview_url": None})
@@ -289,6 +301,7 @@ def download(
     user: Annotated[CurrentUserDep, Depends(require(Perm.DOWNLOAD))],
 ):
     o = _get_output(db, output_id)
+    _assert_output_access(db, user, o)
     if o.output_status not in ("approved", "delivered"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "未承認の画像はダウンロードできません。")
     url = signed_url(o.file_path)

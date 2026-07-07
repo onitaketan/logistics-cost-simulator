@@ -200,6 +200,20 @@ class ModelAssign(BaseModel):
     usage_role: str = "main"
 
 
+class ProjectMemberCreate(BaseModel):
+    # Identify the member by user_id OR email — a project owner (non-admin) can't
+    # list all users, so email is the practical path.
+    user_id: str | None = None
+    email: EmailStr | None = None
+    role_in_project: str | None = None
+
+    @model_validator(mode="after")
+    def _need_identifier(self) -> "ProjectMemberCreate":
+        if not self.user_id and not self.email:
+            raise ValueError("user_id か email のいずれかを指定してください。")
+        return self
+
+
 # ---- Compliance ----
 class ComplianceCheckRequest(BaseModel):
     model_id: str = Field(min_length=1)

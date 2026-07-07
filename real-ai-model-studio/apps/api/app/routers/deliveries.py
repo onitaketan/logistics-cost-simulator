@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.access import accessible_project_ids, assert_project_access
 from app.core.rbac import Perm
 from app.core.security import CurrentUserDep, require
 from app.db.session import get_db
@@ -26,7 +27,14 @@ def list_deliveries(
 ):
     stmt = select(Delivery)
     if project_id:
+        assert_project_access(db, user, project_id)
         stmt = stmt.where(Delivery.project_id == project_id)
+    else:
+        allowed = accessible_project_ids(db, user)
+        if allowed is not None:
+            if not allowed:
+                return ok([])
+            stmt = stmt.where(Delivery.project_id.in_(allowed))
     stmt = stmt.order_by(Delivery.created_at.desc()).limit(limit).offset(offset)
     rows = db.scalars(stmt).all()
     return ok([
@@ -53,6 +61,7 @@ def create_delivery(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUserDep, Depends(require(Perm.DELIVER))],
 ):
+    assert_project_access(db, user, body.project_id)
     output = db.get(GenerationOutput, body.output_id)
     if not output:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
