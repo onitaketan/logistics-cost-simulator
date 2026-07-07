@@ -37,9 +37,11 @@ def _required_levels(db: Session, output: GenerationOutput) -> list[str]:
 
 
 def _assert_output_project_access(db: Session, user, output: GenerationOutput) -> None:
+    # Fail-closed: deny if the parent generation can't be resolved.
     generation = db.get(Generation, output.generation_id)
-    if generation is not None:
-        assert_project_access(db, user, generation.project_id)
+    if generation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    assert_project_access(db, user, generation.project_id)
 
 
 def _request_out(ar: ApprovalRequest) -> dict:

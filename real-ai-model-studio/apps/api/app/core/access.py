@@ -60,7 +60,12 @@ def accessible_project_ids(db: Session, user) -> set[str] | None:
             Project.owner_user_id == user.id, Project.deleted_at.is_(None)
         )
     ).all()
+    # Join projects so soft-deleted ones are excluded here too — otherwise a
+    # member would keep seeing a deleted project's generations/deliveries via the
+    # list endpoints that trust this set directly (owned branch already filters).
     member_of = db.scalars(
-        select(ProjectMember.project_id).where(ProjectMember.user_id == user.id)
+        select(ProjectMember.project_id)
+        .join(Project, Project.id == ProjectMember.project_id)
+        .where(ProjectMember.user_id == user.id, Project.deleted_at.is_(None))
     ).all()
     return {str(x) for x in owned} | {str(x) for x in member_of}

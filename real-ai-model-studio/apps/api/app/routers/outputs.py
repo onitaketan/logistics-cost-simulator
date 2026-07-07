@@ -41,10 +41,14 @@ def _get_output(db: Session, output_id: str) -> GenerationOutput:
 
 
 def _assert_output_access(db: Session, user, o: GenerationOutput) -> None:
-    """Data scope: the caller must have access to the output's project."""
+    """Data scope: the caller must have access to the output's project.
+
+    Fail-closed: if the parent generation can't be resolved (e.g. a legal-ordered
+    physical delete left a dangling output), deny rather than grant."""
     generation = db.get(Generation, o.generation_id)
-    if generation is not None:
-        assert_project_access(db, user, generation.project_id)
+    if generation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "画像が見つかりません。")
+    assert_project_access(db, user, generation.project_id)
 
 
 def require_review_or_view(user: CurrentUserDep) -> CurrentUser:
@@ -227,6 +231,7 @@ def list_reviews(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUser, Depends(require_review_or_view)],
 ):
+    _assert_output_access(db, user, _get_output(db, output_id))
     rows = db.scalars(
         select(OutputReview)
         .where(OutputReview.output_id == output_id)
@@ -251,6 +256,7 @@ def list_approvals(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[CurrentUser, Depends(require_review_or_view)],
 ):
+    _assert_output_access(db, user, _get_output(db, output_id))
     rows = db.scalars(
         select(Approval)
         .where(Approval.output_id == output_id)

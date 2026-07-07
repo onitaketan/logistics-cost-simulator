@@ -222,6 +222,10 @@ def add_member(
         target = db.scalar(select(User).where(User.email == body.email))
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "ユーザーが見つかりません。")
+    # Don't grant project access to a suspended account — the membership row would
+    # silently become live the moment the account is reactivated.
+    if target.status != "active":
+        raise HTTPException(status.HTTP_409_CONFLICT, "停止中のユーザーは追加できません。")
     existing = db.scalar(select(ProjectMember).where(
         ProjectMember.project_id == project_id, ProjectMember.user_id == target.id))
     if existing:
