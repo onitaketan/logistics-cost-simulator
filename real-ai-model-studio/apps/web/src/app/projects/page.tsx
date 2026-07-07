@@ -6,15 +6,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 import type { Project } from "@rams/shared-types";
 
 export default function ProjectsPage() {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.listProjects().then(setProjects).catch((e) => setError((e as Error).message));
+    api
+      .listProjects()
+      .then(setProjects)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -24,6 +30,9 @@ export default function ProjectsPage() {
         <button onClick={() => router.push("/projects/new")}>新規案件作成</button>
       </div>
       {error && <p className="error">{error}</p>}
+      {loading ? (
+        <Loading label="案件を読み込んでいます…" />
+      ) : (
       <div className="card">
         <table>
           <thead>
@@ -57,6 +66,7 @@ export default function ProjectsPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

@@ -121,13 +121,22 @@ export default function ModelDetailPage() {
     api.getModel(id).then(setModel).catch((e) => setError((e as Error).message));
   }, [id]);
   const loadContracts = useCallback(() => {
-    api.listContracts(id).then(setContracts).catch(() => setContracts([]));
+    api.listContracts(id).then(setContracts).catch((e) => {
+      setContracts([]);
+      setError((e as Error).message);
+    });
   }, [id]);
   const loadPermissions = useCallback(() => {
-    api.listPermissions(id).then(setPermissions).catch(() => setPermissions([]));
+    api.listPermissions(id).then(setPermissions).catch((e) => {
+      setPermissions([]);
+      setError((e as Error).message);
+    });
   }, [id]);
   const loadAssets = useCallback(() => {
-    api.listAssets(id).then(setAssets).catch(() => setAssets([]));
+    api.listAssets(id).then(setAssets).catch((e) => {
+      setAssets([]);
+      setError((e as Error).message);
+    });
   }, [id]);
 
   useEffect(() => {

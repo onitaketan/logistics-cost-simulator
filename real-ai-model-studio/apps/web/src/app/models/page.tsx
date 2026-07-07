@@ -7,15 +7,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 import type { Model } from "@rams/shared-types";
 
 export default function ModelsPage() {
   const router = useRouter();
   const [models, setModels] = useState<Model[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.listModels().then(setModels).catch((e) => setError((e as Error).message));
+    api
+      .listModels()
+      .then(setModels)
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
   }, []);
 
   return (
@@ -24,7 +30,10 @@ export default function ModelsPage() {
         <h2>Models</h2>
         <button onClick={() => router.push("/models/new")}>新規モデル登録</button>
       </div>
-      {error && <p className="error">{error}（要ログイン / API起動）</p>}
+      {error && <p className="error">{error}</p>}
+      {loading ? (
+        <Loading label="モデルを読み込んでいます…" />
+      ) : (
       <div className="card">
         <table>
           <thead>
@@ -62,6 +71,7 @@ export default function ModelsPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

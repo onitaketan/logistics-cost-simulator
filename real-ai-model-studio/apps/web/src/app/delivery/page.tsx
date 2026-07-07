@@ -34,7 +34,13 @@ export default function DeliveryPage() {
   }, []);
 
   function loadDeliveries(pid: string) {
-    api.listDeliveries(pid).then(setDeliveries).catch(() => setDeliveries([]));
+    api
+      .listDeliveries(pid)
+      .then(setDeliveries)
+      .catch((e) => {
+        setDeliveries([]);
+        setError((e as Error).message);
+      });
   }
 
   // Collect this project's approved outputs by walking its generations. The

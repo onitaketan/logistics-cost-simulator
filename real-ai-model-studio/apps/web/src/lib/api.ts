@@ -55,6 +55,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     redirectToLogin();
     throw new Error("認証が切れました。再度ログインしてください。");
   }
+  // 403 => authenticated but not permitted. Surface a clean message instead of
+  // the backend's raw "role '...' lacks permission '...'" string. Do NOT redirect.
+  if (res.status === 403) {
+    throw new Error("この操作を行う権限がありません。");
+  }
 
   const body = (await res.json()) as ApiResponse<T>;
   if (!body.success || body.error) {
@@ -75,6 +80,9 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
     clearAuth();
     redirectToLogin();
     throw new Error("認証が切れました。再度ログインしてください。");
+  }
+  if (res.status === 403) {
+    throw new Error("この操作を行う権限がありません。");
   }
   const body = (await res.json()) as ApiResponse<T>;
   if (!body.success || body.error) {

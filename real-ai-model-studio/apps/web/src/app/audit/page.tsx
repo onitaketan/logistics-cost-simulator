@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { Loading } from "@/components/Loading";
 import type { AuditLog } from "@/types";
 
 const ACTION_TYPES = ["", "create", "update", "generate", "review", "approve", "deliver", "download", "view", "login", "delete"];
@@ -18,6 +19,7 @@ export default function AuditPage() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const filters = useCallback(
     () => ({
@@ -31,10 +33,12 @@ export default function AuditPage() {
 
   const load = useCallback(() => {
     setError(null);
+    setLoading(true);
     api
       .listAuditLogs({ ...filters(), limit: 100 })
       .then(setLogs)
-      .catch((e) => setError((e as Error).message));
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
   }, [filters]);
 
   useEffect(() => {
@@ -91,6 +95,9 @@ export default function AuditPage() {
       </div>
       {error && <p className="error">{error}</p>}
 
+      {loading ? (
+        <Loading label="監査ログを読み込んでいます…" />
+      ) : (
       <div className="card">
         <table>
           <thead>
@@ -120,6 +127,7 @@ export default function AuditPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }
