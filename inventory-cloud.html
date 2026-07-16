@@ -846,13 +846,27 @@ const FMT=(typeof Html5QrcodeSupportedFormats!=="undefined")?[
   Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,
   Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,
   Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.QR_CODE]:undefined;
-function startScan(readerId,startBtn,stopBtn,onResult){
-  if(typeof Html5Qrcode==="undefined"){ toast("スキャナー読込に失敗。手入力をご利用ください","err"); return; }
-  stopAllScanners(); scanner=new Html5Qrcode(readerId,{formatsToSupport:FMT,verbose:false});
+function scanErrMsg(err){
+  const s=((err&&(err.name||""))+" "+(err&&(err.message||"")));
+  if(/NotAllowed|Permission|denied/i.test(s)) return "カメラの使用が許可されていません。ブラウザ設定でこのサイトのカメラを『許可』にして、もう一度お試しください。";
+  if(/NotFound|Overconstrained|no ?camera|Requested device/i.test(s)) return "背面カメラが見つかりませんでした。JANコードの手入力をお使いください。";
+  if(/NotReadable|TrackStart|in use|Could not start/i.test(s)) return "カメラが他のアプリで使用中です。他アプリを閉じて、もう一度お試しください。";
+  return "カメラを起動できませんでした。JANコードの手入力をお使いください（ホーム画面アプリで出る場合はSafari/Chromeで開くと直ることがあります）。";
+}
+async function startScan(readerId,startBtn,stopBtn,onResult){
+  const fail=(msg)=>{ toast(msg,"err"); startBtn.classList.remove("hide"); stopBtn.classList.add("hide"); scanner=null; };
+  if(typeof Html5Qrcode==="undefined"){ return fail("スキャナーの読込に失敗しました。ページを再読み込みしてください（通信環境をご確認ください）。"); }
+  if(!window.isSecureContext||!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)){ return fail("この画面ではカメラを使えません。JANコードの手入力をお使いください。"); }
+  stopAllScanners();
   startBtn.classList.add("hide"); stopBtn.classList.remove("hide");
-  scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:260,height:150}},
-    dec=>{ onResult(dec); if(navigator.vibrate)navigator.vibrate(80); stopScan(startBtn,stopBtn); }, ()=>{})
-  .catch(()=>{ toast("カメラが使えません。JANコードの手入力をお使いください（設定でカメラ許可も可）","err"); startBtn.classList.remove("hide"); stopBtn.classList.add("hide"); scanner=null; });
+  scanner=new Html5Qrcode(readerId,{formatsToSupport:FMT,verbose:false});
+  let cam={facingMode:"environment"};
+  try{ const cams=await Html5Qrcode.getCameras();
+       if(cams&&cams.length){ const b=cams.find(c=>/back|rear|environment|背面|外側|後/i.test(c.label||""))||cams[cams.length-1]; if(b&&b.id) cam=b.id; } }
+  catch(e){ return fail(scanErrMsg(e)); }
+  try{ await scanner.start(cam,{fps:10,qrbox:{width:260,height:150}},
+        dec=>{ onResult(dec); if(navigator.vibrate)navigator.vibrate(80); stopScan(startBtn,stopBtn); }, ()=>{}); }
+  catch(e){ fail(scanErrMsg(e)); }
 }
 function stopScan(a,b){ if(a)a.classList.remove("hide"); if(b)b.classList.add("hide"); if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});} }
 function stopAllScanners(){ if(scanner){const s=scanner;scanner=null;s.stop().then(()=>s.clear()).catch(()=>{});}
