@@ -1,7 +1,7 @@
 /* 在庫管理PWA Service Worker
    方針: 同一オリジンのファイルはネットワーク優先＋キャッシュ退避（オフライン耐性）。
    Supabase/CDN等の外部通信はそのままネットワークへ通す。 */
-const CACHE = "inv-pwa-v4";
+const CACHE = "inv-pwa-v5";
 const SHELL = [
   "inventory-staff.html",
   "inventory-cloud.html",
