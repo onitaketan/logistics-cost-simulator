@@ -129,6 +129,16 @@ a { color: var(--navy-700); }
   font-weight: 600;
   box-shadow: inset 3px 0 0 #6f8fc4;
 }
+/* Muted group headers for the workflow-ordered nav sections. */
+.app-sidebar .nav-section-title {
+  color: var(--navy-300);
+  opacity: 0.65;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.08em;
+  text-transform: none;
+  padding: var(--sp-3) var(--sp-3) var(--sp-1);
+}
+.app-sidebar .nav-group + .nav-group { margin-top: var(--sp-2); }
 
 .app-main {
   flex: 1;
@@ -214,6 +224,36 @@ button.ghost:hover { background: #eef0f4; border-color: var(--line-strong); }
 button.small { padding: 4px 10px; font-size: var(--fs-xs); }
 button.danger { background: var(--ng); border-color: var(--ng); }
 button.danger:hover { background: #a81b25; border-color: #a81b25; }
+
+/* Links styled as buttons (dashboard quick actions). Mirrors the button rules. */
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  background: var(--navy);
+  color: #fff;
+  border: 1px solid var(--navy);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-weight: 550;
+  text-decoration: none;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.btn-link:hover { background: var(--navy-700); border-color: var(--navy-700); }
+.btn-link.ghost { background: transparent; color: var(--navy); border: 1px solid var(--line-strong); }
+.btn-link.ghost:hover { background: #eef0f4; }
+
+/* Dashboard 業務フロー strip: compact pipeline guide with muted arrows. */
+.flow-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  font-size: var(--fs-sm);
+}
+.flow-strip a { text-decoration: none; color: var(--navy); font-weight: 550; }
+.flow-strip a:hover { text-decoration: underline; }
+.flow-arrow { color: var(--ink-600); opacity: 0.5; }
+.flow-caption { font-size: var(--fs-xs); margin: var(--sp-2) 0 0; }
 
 /* ---------- Tables ---------- */
 table { width: 100%; border-collapse: collapse; }

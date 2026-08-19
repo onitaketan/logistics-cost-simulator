@@ -3,7 +3,7 @@
 // Dashboard (docs/02 §4). Real counts derived from /models and /projects, plus a
 // project table. The UI only reflects backend data; it computes no compliance.
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { Loading } from "@/components/Loading";
@@ -11,6 +11,17 @@ import { Notice } from "@/components/Notice";
 import { EmptyState } from "@/components/EmptyState";
 import type { ExpiringContract } from "@/types";
 import type { Model, Project } from "@rams/shared-types";
+
+// 業務フロー guide steps, in pipeline order.
+const FLOW_STEPS: readonly [href: string, label: string][] = [
+  ["/models", "①モデル登録"],
+  ["/models", "②契約・許諾"],
+  ["/projects", "③案件・要件"],
+  ["/projects", "④コンプライアンス判定"],
+  ["/generation", "⑤生成"],
+  ["/review", "⑥レビュー・承認"],
+  ["/delivery", "⑦納品"],
+];
 
 export default function Dashboard() {
   const [models, setModels] = useState<Model[]>([]);
@@ -62,6 +73,41 @@ export default function Dashboard() {
     <div>
       <h2>Dashboard</h2>
       {error && <Notice variant="error">データの取得に失敗しました: {error}</Notice>}
+
+      <div className="card">
+        <h3>クイックアクション</h3>
+        <div className="row wrap">
+          <Link href="/models/new" className="btn-link">
+            新規モデル登録
+          </Link>
+          <Link href="/projects/new" className="btn-link">
+            新規案件作成
+          </Link>
+          <Link href="/generation" className="btn-link ghost">
+            生成を開始
+          </Link>
+          <Link href="/review" className="btn-link ghost">
+            レビューへ
+          </Link>
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>業務フロー</h3>
+        <div className="flow-strip">
+          {FLOW_STEPS.map(([href, label], i) => (
+            <Fragment key={label}>
+              {i > 0 && (
+                <span className="flow-arrow" aria-hidden="true">
+                  →
+                </span>
+              )}
+              <Link href={href}>{label}</Link>
+            </Fragment>
+          ))}
+        </div>
+        <p className="muted flow-caption">判定を通過した案件のみ生成できます。</p>
+      </div>
 
       <div className="kpi-grid">
         {kpis.map(([label, value]) => (

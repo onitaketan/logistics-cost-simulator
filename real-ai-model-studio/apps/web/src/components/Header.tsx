@@ -9,17 +9,17 @@ import { api } from "@/lib/api";
 import { clearAuth, getRole } from "@/lib/auth";
 
 const TITLES: Record<string, string> = {
-  "/": "Dashboard",
-  "/models": "Models",
-  "/projects": "Projects",
-  "/generation": "Generation Studio",
+  "/": "ダッシュボード",
+  "/models": "モデル管理",
+  "/projects": "案件管理",
+  "/generation": "生成スタジオ",
   "/templates": "プロンプトテンプレート",
-  "/compliance": "コンプライアンス",
-  "/review": "Review",
+  "/compliance": "判定チェック",
+  "/review": "レビュー・承認",
   "/compare": "出力比較",
-  "/delivery": "Delivery",
-  "/audit": "Audit Log",
-  "/settings": "Settings",
+  "/delivery": "納品",
+  "/audit": "監査ログ",
+  "/settings": "ユーザー管理",
 };
 
 function pageTitle(pathname: string): string {

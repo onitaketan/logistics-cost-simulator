@@ -142,6 +142,12 @@ export default function ProjectDetailPage() {
     <div>
       <Link href="/projects">← Projects</Link>
       <h2>{project.project_name}</h2>
+      {/* Workflow continuity: jump to the next stages with this project preselected. */}
+      <p style={{ display: "flex", gap: 16, fontSize: 13, margin: "4px 0 12px" }}>
+        <Link href={`/generation?project=${id}`}>この案件で生成 →</Link>
+        <Link href={`/review?project=${id}`}>レビュー →</Link>
+        <Link href={`/delivery?project=${id}`}>納品 →</Link>
+      </p>
       {error && <p className="error">{error}</p>}
       {notice && <p style={{ color: "var(--ok)" }}>{notice}</p>}
 

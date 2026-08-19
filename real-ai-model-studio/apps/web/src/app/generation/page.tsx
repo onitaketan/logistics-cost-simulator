@@ -30,6 +30,13 @@ export default function GenerationStudio() {
     api.listPromptTemplates(true).then(setTemplates).catch(() => setTemplates([]));
   }, []);
 
+  // Workflow continuity: preselect the project from ?project= (once, on mount).
+  // The <select> value matches as soon as the projects list arrives.
+  useEffect(() => {
+    const pid = new URLSearchParams(window.location.search).get("project");
+    if (pid) setProjectId(pid);
+  }, []);
+
   // Choosing a template fills the prompt (and negative prompt) fields and records
   // which template was used so the backend can attribute the generation to it.
   function pickTemplate(id: string) {
@@ -181,6 +188,14 @@ export default function GenerationStudio() {
                   {outputs.map((o) => (
                     <OutputThumb key={o.id} output={o} />
                   ))}
+                </div>
+                <div style={{ display: "flex", gap: 16, marginTop: 10, fontSize: 13 }}>
+                  <Link href={`/review?project=${projectId}&generation=${genId}`}>
+                    この生成をレビュー →
+                  </Link>
+                  <Link href={`/compare?project=${projectId}&generation=${genId}`}>
+                    出力を比較 →
+                  </Link>
                 </div>
               </>
             )}

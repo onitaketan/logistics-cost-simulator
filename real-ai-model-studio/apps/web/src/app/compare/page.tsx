@@ -7,6 +7,7 @@
 // logic; the backend re-gates every action.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, resolveFileUrl } from "@/lib/api";
 import type { OutputStatus, Project } from "@rams/shared-types";
 import type { GenerationSummary, Output } from "@/types";
@@ -27,6 +28,20 @@ export default function ComparePage() {
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch((e) => setError((e as Error).message));
+  }, []);
+
+  // Workflow continuity: preselect from ?project= / ?generation= (once, on mount)
+  // via the SAME handlers the selects use, so data loads exactly as if clicked.
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const pid = qs.get("project");
+    const gid = qs.get("generation");
+    if (!pid) return;
+    void (async () => {
+      await pickProject(pid);
+      if (gid) await pickGeneration(gid);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pickProject(v: string) {
@@ -105,6 +120,10 @@ export default function ComparePage() {
                 {c}列
               </button>
             ))}
+            <Link href={`/review?project=${projectId}&generation=${genId}`}
+                  style={{ marginLeft: "auto", fontSize: 13 }}>
+              レビューへ →
+            </Link>
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@
 // until the backend says it is fully approved. The UI carries NO approval logic.
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, resolveFileUrl } from "@/lib/api";
 import type { ApprovalLevel, OutputStatus, Project } from "@rams/shared-types";
 import type {
@@ -34,6 +35,20 @@ export default function ReviewPage() {
 
   useEffect(() => {
     api.listProjects().then(setProjects).catch((e) => setError((e as Error).message));
+  }, []);
+
+  // Workflow continuity: preselect from ?project= / ?generation= (once, on mount)
+  // via the SAME handlers the selects use, so data loads exactly as if clicked.
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const pid = qs.get("project");
+    const gid = qs.get("generation");
+    if (!pid) return;
+    void (async () => {
+      await pickProject(pid);
+      if (gid) await pickGeneration(gid);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function pickProject(v: string) {
@@ -100,11 +115,18 @@ export default function ReviewPage() {
             この案件には生成ジョブがありません。
           </p>
         )}
+        {genId && (
+          <p style={{ fontSize: 13, margin: "8px 0 0" }}>
+            <Link href={`/compare?project=${projectId}&generation=${genId}`}>
+              比較画面で見る →
+            </Link>
+          </p>
+        )}
       </div>
       {error && <p className="error">{error}</p>}
 
       {outputs.map((o) => (
-        <OutputReviewCard key={o.id} output={o} onError={setError} />
+        <OutputReviewCard key={o.id} output={o} projectId={projectId} onError={setError} />
       ))}
       {genId && outputs.length === 0 && !error && (
         <p className="muted">この生成ジョブには出力がありません。</p>
@@ -118,9 +140,11 @@ export default function ReviewPage() {
 
 function OutputReviewCard({
   output,
+  projectId,
   onError,
 }: {
   output: Output;
+  projectId: string;
   onError: (m: string) => void;
 }) {
   const [status, setStatus] = useState<OutputStatus>(output.output_status);
@@ -287,6 +311,12 @@ function OutputReviewCard({
           <p style={{ marginTop: 0 }}>
             output: {output.id} — 現状態:{" "}
             <span className="badge neutral">{currentStatus}</span>
+            {(currentStatus === "approved" || currentStatus === "delivered") && (
+              <Link href={`/delivery?project=${projectId}`}
+                    style={{ marginLeft: 12, fontSize: 13 }}>
+                納品へ →
+              </Link>
+            )}
           </p>
 
           {/* Set status */}

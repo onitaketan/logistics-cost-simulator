@@ -33,6 +33,14 @@ export default function DeliveryPage() {
     api.listProjects().then(setProjects).catch((e) => setError((e as Error).message));
   }, []);
 
+  // Workflow continuity: preselect the project from ?project= (once, on mount)
+  // via the SAME handler the select uses, so approved outputs/deliveries load.
+  useEffect(() => {
+    const pid = new URLSearchParams(window.location.search).get("project");
+    if (pid) void pickProject(pid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function loadDeliveries(pid: string) {
     api
       .listDeliveries(pid)
