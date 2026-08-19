@@ -5,7 +5,7 @@
   "description": "バーコードで売れた在庫を減らす・売れ筋・売上を確認",
   "start_url": "inventory-staff.html",
   "scope": "./",
-  "display": "standalone",
+  "display": "browser",
   "orientation": "portrait-primary",
   "background_color": "#f4f5f5",
   "theme_color": "#15201d",
