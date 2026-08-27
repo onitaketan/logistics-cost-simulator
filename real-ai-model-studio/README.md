@@ -42,6 +42,13 @@ docker compose up --build
 #       docker compose down -v  （DB・保存画像も削除してまっさら化）
 ```
 
+既定はコストゼロの mock エンジン（実画像なし）。**実AI生成への切替はYAML編集不要**で、
+環境変数を付けて起動するだけ（課金発生。詳細は `docs/07_trial_runbook.md §8`）:
+
+```bash
+AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up --build
+```
+
 生成は worker が Redis 経由で非同期実行し、生成画像は api/worker 共有ボリュームに保存される。
 初期パスワードは運用開始時に必ずローテーションすること（`docs/08_operations_manual.md`）。
 

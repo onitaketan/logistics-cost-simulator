@@ -173,6 +173,19 @@ MVP/仮テストは mock エンジン。実際の画像生成に切り替える�
 しない（`.env` は `.gitignore` 済み）。
 
 ### 8.1 キー投入とエンジン切替
+
+**Docker（フルスタック）の場合 — YAML編集不要・キーをファイルに書かない:**
+docker-compose.yml が `AI_ENGINE` / `OPENAI_API_KEY` / `REPLICATE_API_TOKEN` をホストの
+シェル環境変数からそのまま受け取る（未設定なら課金なしの mock に自動フォールバック）。
+
+```bash
+# 例: OpenAI（キーはシェルにのみ存在。ファイルには残らない）
+AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up --build
+# 例: Replicate
+AI_ENGINE=replicate REPLICATE_API_TOKEN=r8_... docker compose up --build
+```
+
+**ローカル venv（uvicorn 直接起動）の場合 — .env に設定:**
 ```bash
 # .env に設定（例: OpenAI）
 AI_ENGINE=openai
