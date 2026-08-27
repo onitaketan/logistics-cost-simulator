@@ -59,11 +59,16 @@ services:
       # Local storage root, backed by a shared named volume (see below).
       STORAGE_PROVIDER: local
       STORAGE_DIR: /app/storage
-      # AI engine: pass-through from the host shell so no YAML edit (and no key
-      # written to a file) is needed to switch to real generation:
-      #   AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up
-      # Defaults to the billing-free mock engine. Empty values are treated as
-      # "unset" by the adapters, so leaving these out is always safe.
+      # OFFLINE MODE (default ON): prompts / generated images never leave this
+      # machine — external engines (openai/replicate) and cloud storage (s3/r2)
+      # are refused at startup and at the engine registry. Fully-local real
+      # generation: run Stable Diffusion WebUI with --api on the host and set
+      #   AI_ENGINE=self_hosted SELF_HOSTED_BASE_URL=http://host.docker.internal:7860
+      # Cloud engines require an explicit opt-out (understand the data leaves
+      # the machine):
+      #   OFFLINE_MODE=false AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up
+      OFFLINE_MODE: ${OFFLINE_MODE:-true}
+      SELF_HOSTED_BASE_URL: ${SELF_HOSTED_BASE_URL:-}
       AI_ENGINE: ${AI_ENGINE:-mock}
       AI_ENGINE_API_KEY: ${AI_ENGINE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -73,6 +78,8 @@ services:
       RUN_MIGRATIONS: "true"
     volumes:
       - storagedata:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     depends_on:
@@ -95,11 +102,16 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       STORAGE_PROVIDER: local
       STORAGE_DIR: /app/storage
-      # AI engine: pass-through from the host shell so no YAML edit (and no key
-      # written to a file) is needed to switch to real generation:
-      #   AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up
-      # Defaults to the billing-free mock engine. Empty values are treated as
-      # "unset" by the adapters, so leaving these out is always safe.
+      # OFFLINE MODE (default ON): prompts / generated images never leave this
+      # machine — external engines (openai/replicate) and cloud storage (s3/r2)
+      # are refused at startup and at the engine registry. Fully-local real
+      # generation: run Stable Diffusion WebUI with --api on the host and set
+      #   AI_ENGINE=self_hosted SELF_HOSTED_BASE_URL=http://host.docker.internal:7860
+      # Cloud engines require an explicit opt-out (understand the data leaves
+      # the machine):
+      #   OFFLINE_MODE=false AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up
+      OFFLINE_MODE: ${OFFLINE_MODE:-true}
+      SELF_HOSTED_BASE_URL: ${SELF_HOSTED_BASE_URL:-}
       AI_ENGINE: ${AI_ENGINE:-mock}
       AI_ENGINE_API_KEY: ${AI_ENGINE_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
@@ -109,6 +121,8 @@ services:
       RUN_MIGRATIONS: "false"
     volumes:
       - storagedata:/app/storage
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy

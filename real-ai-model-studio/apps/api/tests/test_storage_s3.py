@@ -14,6 +14,8 @@ def storage(monkeypatch):
     """Point get_settings() at an s3 provider + bucket, reload the module, and
     stand up a fake S3 with moto. Yields the storage module inside the mock."""
     monkeypatch.setenv("STORAGE_PROVIDER", "s3")
+    # s3 is cloud storage: opt out of the offline-by-default guard for this test.
+    monkeypatch.setenv("OFFLINE_MODE", "false")
     monkeypatch.setenv("STORAGE_BUCKET", BUCKET)
     # Dummy creds so boto3 is happy; moto intercepts before any network call.
     monkeypatch.setenv("STORAGE_ACCESS_KEY", "testing")

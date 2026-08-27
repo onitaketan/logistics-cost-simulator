@@ -62,6 +62,30 @@ class Settings(BaseSettings):
     ai_engine: str = "mock"
     ai_engine_api_key: str | None = None
 
+    # OFFLINE MODE — default ON (fail-closed): prompts and generated likeness
+    # data must not leave this machine. While true, external AI engines
+    # (openai/replicate) and cloud storage (s3/r2) are refused both at startup
+    # (below) and at the engine registry. Real image generation stays possible
+    # fully offline via ai_engine=self_hosted (a local Stable Diffusion server).
+    # Set OFFLINE_MODE=false explicitly to opt in to external transmission.
+    offline_mode: bool = True
+
+    def enforce_offline_consistency(self) -> None:
+        """Refuse to start with a configuration that would send data online
+        while offline_mode is on. Startup-time twin of the registry guard."""
+        if not self.offline_mode:
+            return
+        if self.ai_engine in ("openai", "replicate"):
+            raise RuntimeError(
+                f"OFFLINE_MODE 有効のため AI_ENGINE='{self.ai_engine}'（外部送信）では起動できません。"
+                "self_hosted / mock を使うか、OFFLINE_MODE=false を明示してください。"
+            )
+        if self.storage_provider in ("s3", "r2"):
+            raise RuntimeError(
+                f"OFFLINE_MODE 有効のため STORAGE_PROVIDER='{self.storage_provider}'"
+                "（クラウド保存）では起動できません。local を使うか、OFFLINE_MODE=false を明示してください。"
+            )
+
     def enforce_production_secrets(self) -> None:
         """Refuse to run outside local with a default/blank signing secret.
 
@@ -82,4 +106,5 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     settings = Settings()
     settings.enforce_production_secrets()
+    settings.enforce_offline_consistency()
     return settings

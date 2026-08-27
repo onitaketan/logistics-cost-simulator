@@ -29,11 +29,20 @@ def _client(handler) -> httpx.AsyncClient:
 
 
 # --------------------------------------------------------------------- registry
-def test_registry_returns_instances():
-    assert isinstance(get_adapter("openai"), OpenAIAdapter)
-    assert isinstance(get_adapter("replicate"), ReplicateAdapter)
-    # mock must survive
-    assert isinstance(get_adapter("mock"), AIEngineAdapter)
+def test_registry_returns_instances(monkeypatch):
+    # External engines resolve only once OFFLINE_MODE is explicitly opted out
+    # (offline-by-default spec); see test_offline_mode.py for the guard itself.
+    from app.core import config
+
+    monkeypatch.setenv("OFFLINE_MODE", "false")
+    config.get_settings.cache_clear()
+    try:
+        assert isinstance(get_adapter("openai"), OpenAIAdapter)
+        assert isinstance(get_adapter("replicate"), ReplicateAdapter)
+        # mock must survive
+        assert isinstance(get_adapter("mock"), AIEngineAdapter)
+    finally:
+        config.get_settings.cache_clear()
 
 
 def test_registry_unknown_key_raises_value_error():

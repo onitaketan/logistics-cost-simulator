@@ -42,11 +42,25 @@ docker compose up --build
 #       docker compose down -v  （DB・保存画像も削除してまっさら化）
 ```
 
-既定はコストゼロの mock エンジン（実画像なし）。**実AI生成への切替はYAML編集不要**で、
-環境変数を付けて起動するだけ（課金発生。詳細は `docs/07_trial_runbook.md §8`）:
+### オフライン仕様（既定）— 生成物・プロンプトをPC外に出さない
+
+**既定で OFFLINE_MODE=ON**: 外部AIエンジン（openai/replicate）とクラウド保存（S3/R2）は
+起動時とエンジン解決時の両方で拒否される（fail-closed）。DB・画像・監査ログ・承認ポータル
+まで全てこのPC（およびLAN）内で完結する。
+
+**実画像をオフラインのまま生成する（推奨）** — PC内のローカル生成サーバを使う:
 
 ```bash
-AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up --build
+# 1) Stable Diffusion WebUI (AUTOMATIC1111) を --api 付きでこのPCで起動しておく（:7860）
+# 2) self_hosted エンジンで起動（プロンプトも画像も一切外部送信されない）
+AI_ENGINE=self_hosted SELF_HOSTED_BASE_URL=http://host.docker.internal:7860 docker compose up -d --build
+```
+
+クラウドAI（OpenAI等）を使う場合は、**データがPC外へ送信されることを理解した上で**
+`OFFLINE_MODE=false` を明示する（課金発生。詳細は `docs/07_trial_runbook.md §8`）:
+
+```bash
+OFFLINE_MODE=false AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up -d --build
 ```
 
 生成は worker が Redis 経由で非同期実行し、生成画像は api/worker 共有ボリュームに保存される。

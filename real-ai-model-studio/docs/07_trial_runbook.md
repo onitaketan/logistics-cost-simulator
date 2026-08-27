@@ -178,11 +178,19 @@ MVP/仮テストは mock エンジン。実際の画像生成に切り替える�
 docker-compose.yml が `AI_ENGINE` / `OPENAI_API_KEY` / `REPLICATE_API_TOKEN` をホストの
 シェル環境変数からそのまま受け取る（未設定なら課金なしの mock に自動フォールバック）。
 
+> **前提: OFFLINE_MODE の解除が必要。** 既定はオフライン仕様（外部送信ブロック）のため、
+> クラウドAIを使うには `OFFLINE_MODE=false` を明示する。プロンプトと生成画像が
+> 外部プロバイダへ送信されることを理解・承認の上で行うこと。
+> **外部送信なしで実画像を作る場合は self_hosted エンジン**（ローカルの
+> Stable Diffusion WebUI `--api` に接続。`SELF_HOSTED_BASE_URL` で指定）を使う。
+
 ```bash
-# 例: OpenAI（キーはシェルにのみ存在。ファイルには残らない）
-AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up --build
+# 例: 完全オフラインで実生成（推奨・流出なし）
+AI_ENGINE=self_hosted SELF_HOSTED_BASE_URL=http://host.docker.internal:7860 docker compose up -d --build
+# 例: OpenAI（外部送信を明示的に許可。キーはシェルにのみ存在）
+OFFLINE_MODE=false AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up -d --build
 # 例: Replicate
-AI_ENGINE=replicate REPLICATE_API_TOKEN=r8_... docker compose up --build
+OFFLINE_MODE=false AI_ENGINE=replicate REPLICATE_API_TOKEN=r8_... docker compose up -d --build
 ```
 
 **ローカル venv（uvicorn 直接起動）の場合 — .env に設定:**

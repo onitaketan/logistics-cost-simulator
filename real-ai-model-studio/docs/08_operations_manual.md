@@ -143,6 +143,16 @@ curl -s http://localhost:8000/health          # {"success":true,"data":{"status"
 | `CELERY_RESULT_BACKEND` | 未指定時 `REDIS_URL` | リザルトバックエンドURL |
 | `CELERY_TASK_ALWAYS_EAGER` | `true` | `true`=インライン実行（Redis/worker不要、開発向け）。**本番は `false` + worker 常駐** |
 
+### 3.2.1 オフラインモード（既定ON — 生成物・プロンプトを外部送信しない）
+
+| 変数 | 既定 | 説明 |
+|---|---|---|
+| `OFFLINE_MODE` | `true` | true の間、外部AIエンジン（openai/replicate）とクラウド保存（s3/r2）を**起動時とエンジン解決時の両方で拒否**（fail-closed）。ローンチ前のローカル常駐運用はこの既定のまま使う |
+| `SELF_HOSTED_BASE_URL` | 空 | ローカル生成サーバ（Stable Diffusion WebUI `--api` 等）のURL。`AI_ENGINE=self_hosted` とセットで、**外部送信ゼロのまま実画像生成**ができる。Docker内からホストは `http://host.docker.internal:7860` |
+
+外部送信の解禁（`OFFLINE_MODE=false`）は、送信先プロバイダの規約・保持ポリシーを確認し、
+本人・事務所への説明と社内承認を経てから行うこと（docs/07 §8）。
+
 ### 3.3 Storage / AI エンジン / フロント
 
 | 変数 | 既定 | 説明 |
