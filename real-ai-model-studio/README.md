@@ -52,6 +52,28 @@ AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up --build
 生成は worker が Redis 経由で非同期実行し、生成画像は api/worker 共有ボリュームに保存される。
 初期パスワードは運用開始時に必ずローテーションすること（`docs/08_operations_manual.md`）。
 
+## 常駐運用（ローンチまで1台のPCで動かし続ける）
+
+```bash
+docker compose up -d --build      # -d でバックグラウンド常駐（ターミナルを閉じてもOK）
+docker compose ps                 # 稼働確認
+docker compose logs -f api        # ログ追尾（Ctrl+Cで抜けるだけ。停止はしない）
+```
+
+- 全サービスに `restart: unless-stopped` 設定済み — **クラッシュ時は自動復帰、PC再起動後も
+  Docker Desktop が立ち上がれば自動で再開**する（Docker Desktop の
+  「Start Docker Desktop when you sign in」を有効にしておくこと）。
+- データ（DB・生成画像）は名前付きボリュームに永続化され、再起動・再ビルドでは消えない。
+  消えるのは `docker compose down -v` を明示実行したときだけ。
+- **日次バックアップ推奨**（cron/タスクスケジューラ等で。詳細は `docs/08 §6`）:
+  ```bash
+  docker compose exec postgres pg_dump -U rams rams > backup_$(date +%Y%m%d).sql
+  ```
+- 更新の取り込み: `git pull && docker compose up -d --build`（マイグレーションは起動時に自動適用）。
+- 同一LANの他のPCから使う場合は、ホストPCのIPで再ビルド:
+  `NEXT_PUBLIC_API_BASE_URL=http://<このPCのIP>:8000/api/v1 CORS_ORIGINS=http://<このPCのIP>:3000 docker compose up -d --build`
+  （他PCからは `http://<このPCのIP>:3000` を開く。社内LAN限定・インターネット公開はしないこと）
+
 ## Quick start — ローカル（venv、開発向け）
 
 ```bash

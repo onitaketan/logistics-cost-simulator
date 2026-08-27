@@ -15,6 +15,7 @@
 services:
   postgres:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: rams
       POSTGRES_PASSWORD: rams
@@ -31,6 +32,7 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports:
       - "6379:6379"
     healthcheck:
@@ -41,10 +43,13 @@ services:
 
   api:
     build: ./apps/api
+    restart: unless-stopped
     environment:
       APP_ENV: local
       API_SECRET_KEY: dev-local-secret-change-me
-      CORS_ORIGINS: http://localhost:3000
+      # For LAN access from other PCs, override with the host's IP, e.g.
+      #   CORS_ORIGINS=http://192.168.1.20:3000
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       DATABASE_URL: postgresql+psycopg://rams:rams@postgres:5432/rams
       REDIS_URL: redis://redis:6379/0
       # Real async: enqueue to Redis; the worker consumes (not inline).
@@ -78,6 +83,7 @@ services:
 
   worker:
     build: ./apps/api
+    restart: unless-stopped
     command: celery -A app.workers.celery_app worker -l info
     environment:
       APP_ENV: local
@@ -110,13 +116,15 @@ services:
         condition: service_healthy
 
   web:
+    restart: unless-stopped
     build:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+        # For LAN access, point at the host's IP, e.g. http://192.168.1.20:8000/api/v1
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000/api/v1}
     ports:
       - "3000:3000"
     depends_on:
