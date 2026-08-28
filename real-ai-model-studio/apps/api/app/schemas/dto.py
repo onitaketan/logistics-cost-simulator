@@ -231,6 +231,10 @@ class GenerationCreate(BaseModel):
     prompt_text: str = Field(min_length=1)
     negative_prompt_text: str | None = None
     prompt_template_id: str | None = None
+    # Reference photos (the model's own consented assets) to base the generation
+    # on — img2img with the self_hosted engine. Ownership/consent/usage checks
+    # are enforced server-side in the router; the cap keeps payloads sane.
+    reference_asset_ids: list[str] = Field(default_factory=list, max_length=4)
     generation_params: dict = {}
 
     _v_prompt = field_validator("prompt_text")(_reject_blank)

@@ -18,7 +18,7 @@ from app.models.model import ModelAsset
 from app.schemas.common import ok
 from app.schemas.dto import DEFAULT_LIMIT, MAX_LIMIT
 from app.services import audit_service
-from app.services.storage_service import store
+from app.services.storage_service import signed_url, store
 
 router = APIRouter(tags=["assets"])
 
@@ -91,6 +91,26 @@ def list_assets(
     return ok([{"id": str(a.id), "asset_type": a.asset_type, "usage_type": a.usage_type,
                 "original_filename": a.original_filename, "consent_confirmed": a.consent_confirmed}
                for a in rows])
+
+
+@router.get("/assets/{asset_id}/preview")
+def preview_asset(
+    asset_id: str,
+    db: Annotated[Session, Depends(get_db)],
+    # Thumbnail for the generation-studio reference picker: viewing the person's
+    # source photos is limited to roles that can actually generate, and every
+    # access is audited (docs/06 §2 — all access to the person's data recorded).
+    user: Annotated[CurrentUserDep, Depends(require(Perm.GENERATE))],
+):
+    a = db.get(ModelAsset, asset_id)
+    if not a or a.deleted_at:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "資産が見つかりません。")
+    url = signed_url(a.file_path)
+    audit_service.record(db, user_id=user.id, action_type="view", target_type="model",
+                         target_id=str(a.model_id),
+                         after={"asset_id": asset_id, "purpose": "reference_picker"})
+    db.commit()
+    return ok({"preview_url": url})
 
 
 @router.delete("/assets/{asset_id}")

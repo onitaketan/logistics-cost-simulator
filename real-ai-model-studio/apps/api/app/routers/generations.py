@@ -87,6 +87,33 @@ def create_generation(
     # A passing check must not become a licence to send an unscreened prompt.
     gen.assert_prompt_clean(body.prompt_text, body.negative_prompt_text)
 
+    # Reference photos (img2img basis): every referenced asset must be THIS
+    # model's own, consented, generation-eligible material. Anything else —
+    # another person's photo, unconsented material, review-only/NG assets —
+    # is a consent-boundary violation and is refused (CLAUDE.md #6/#8).
+    reference_ids: list[str] = []
+    if body.reference_asset_ids:
+        from app.models.model import ModelAsset
+
+        for aid in body.reference_asset_ids:
+            asset = db.get(ModelAsset, aid)
+            if asset is None or asset.deleted_at is not None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND,
+                                    "参考写真が見つかりません。")
+            if str(asset.model_id) != str(body.model_id):
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "参考写真は選択中のモデル本人の素材のみ使用できます。")
+            if not asset.consent_confirmed:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "同意確認が済んでいない素材は生成の参考に使用できません。")
+            if asset.usage_type not in ("reference", "training") or asset.asset_type == "ng":
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    "この素材の利用目的では生成の参考に使用できません。")
+            reference_ids.append(str(asset.id))
+
     # Clamp the batch size to a sane range (1..8): the count drives real engine
     # cost and downstream review load, and must never be caller-unbounded.
     # Coerce defensively — a non-numeric output_count falls back to 1 rather than
@@ -98,6 +125,10 @@ def create_generation(
         requested = 1
     output_count = max(1, min(requested, 8))
     params["output_count"] = output_count
+    if reference_ids:
+        # Carried in generation_params (JSONB) so the worker, revisions (which
+        # copy parent params), and the audit trail all see the same references.
+        params["reference_asset_ids"] = reference_ids
 
     generation = Generation(
         project_id=body.project_id,

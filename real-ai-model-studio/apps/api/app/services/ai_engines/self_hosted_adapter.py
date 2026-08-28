@@ -107,7 +107,7 @@ class SelfHostedAdapter(AIEngineAdapter):
     async def generate_image(self, prompt: str, params: dict[str, Any]) -> list[GeneratedImage]:
         width = int(params.get("width", 1024))
         height = int(params.get("height", 1024))
-        payload = {
+        payload: dict[str, Any] = {
             "prompt": prompt,
             "negative_prompt": params.get("negative_prompt") or "",
             "width": width,
@@ -116,7 +116,20 @@ class SelfHostedAdapter(AIEngineAdapter):
             "seed": int(params.get("seed", -1)),
             "steps": int(params.get("steps", 28)),
         }
-        body = await self._post("/sdapi/v1/txt2img", payload)
+        # Reference photos (the model's consented assets, loaded by the worker)
+        # switch the call to img2img: the first reference becomes the init image
+        # and denoising_strength controls how far generation departs from it
+        # (0=copy, 1=ignore). A1111's init_images drives composition/style; true
+        # face-identity fidelity additionally needs a server-side extension
+        # (IP-Adapter / LoRA) configured by the operator — passing refs here is
+        # engine-agnostic groundwork for that.
+        refs = params.get("reference_images_b64") or []
+        if refs:
+            payload["init_images"] = list(refs[:1])
+            payload["denoising_strength"] = float(params.get("denoising_strength", 0.6))
+            body = await self._post("/sdapi/v1/img2img", payload)
+        else:
+            body = await self._post("/sdapi/v1/txt2img", payload)
         return self._images_from(body, width, height)
 
     async def revise_image(

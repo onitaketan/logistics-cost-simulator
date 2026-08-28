@@ -134,6 +134,9 @@ export interface CreateGenerationPayload {
   negative_prompt_text?: string;
   generation_params: GenerationParams;
   prompt_template_id?: string;
+  // Reference photos (img2img basis) — max 4. Backend enforces ownership,
+  // consent, and usage_type eligibility; the UI only mirrors the disables.
+  reference_asset_ids?: string[];
 }
 
 export interface PromptTemplatePayload {
@@ -244,6 +247,9 @@ export const api = {
   },
   deleteAsset: (assetId: string) =>
     request<Record<string, never>>(`/assets/${assetId}`, { method: "DELETE" }),
+  // Signed, short-lived preview for an uploaded reference asset (may be null).
+  getAssetPreview: (assetId: string) =>
+    request<{ preview_url: string | null }>(`/assets/${assetId}/preview`),
 
   // ---- Projects ----
   listProjects: () => request<Project[]>("/projects"),

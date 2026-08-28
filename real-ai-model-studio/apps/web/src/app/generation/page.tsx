@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { api, resolveFileUrl } from "@/lib/api";
 import type { ComplianceResult, Model, Project } from "@rams/shared-types";
-import type { Output, PromptTemplate } from "@/types";
+import type { Asset, Output, PromptTemplate } from "@/types";
 
 export default function GenerationStudio() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -21,6 +21,10 @@ export default function GenerationStudio() {
   const [check, setCheck] = useState<ComplianceResult | null>(null);
   const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const [templateId, setTemplateId] = useState("");
+  // Reference photos of the selected talent (img2img basis). Selection is
+  // cleared whenever the model changes; the backend re-validates eligibility.
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [refIds, setRefIds] = useState<string[]>([]);
 
   // Populate project/model pickers so testers never paste raw UUIDs, and load the
   // active prompt templates for the picker (P1-004).
@@ -36,6 +40,25 @@ export default function GenerationStudio() {
     const pid = new URLSearchParams(window.location.search).get("project");
     if (pid) setProjectId(pid);
   }, []);
+
+  // Load the selected model's uploaded photos and reset any previous selection
+  // (a selection must never carry over to a different talent).
+  useEffect(() => {
+    setRefIds([]);
+    if (!modelId) {
+      setAssets([]);
+      return;
+    }
+    api.listAssets(modelId).then(setAssets).catch(() => setAssets([]));
+  }, [modelId]);
+
+  function toggleRef(assetId: string, checked: boolean) {
+    setRefIds((prev) => {
+      if (!checked) return prev.filter((id) => id !== assetId);
+      if (prev.includes(assetId) || prev.length >= 4) return prev;
+      return [...prev, assetId];
+    });
+  }
 
   // Choosing a template fills the prompt (and negative prompt) fields and records
   // which template was used so the backend can attribute the generation to it.
@@ -110,6 +133,7 @@ export default function GenerationStudio() {
         negative_prompt_text: negative || undefined,
         generation_params: { output_count: 4, width: 1024, height: 1280 },
         prompt_template_id: templateId || undefined,
+        reference_asset_ids: refIds.length > 0 ? refIds : undefined,
       });
       setGenId(res.generation_id);
       setGenStatus(res.status);
@@ -171,6 +195,44 @@ export default function GenerationStudio() {
           )}
         </div>
 
+        {modelId && (
+          <div className="card">
+            <h3>
+              参考写真（顔・スタイル）
+              {refIds.length > 0 && (
+                <span className="muted" style={{ fontSize: 12, fontWeight: 400, marginLeft: 8 }}>
+                  {refIds.length}/4 選択中{refIds.length >= 4 ? "（最大4枚）" : ""}
+                </span>
+              )}
+            </h3>
+            {assets.length > 0 ? (
+              <>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+                  {assets.map((a) => (
+                    <AssetRefCard
+                      key={a.id}
+                      asset={a}
+                      checked={refIds.includes(a.id)}
+                      atLimit={refIds.length >= 4}
+                      onToggle={toggleRef}
+                    />
+                  ))}
+                </div>
+                <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+                  選択した写真を土台に生成します（self_hosted エンジン時は img2img）。mock
+                  エンジンでは無視されます。{" "}
+                  <Link href={`/models/${modelId}`}>写真の追加はモデル詳細の素材タブから →</Link>
+                </p>
+              </>
+            ) : (
+              <p className="muted" style={{ fontSize: 12, marginBottom: 0 }}>
+                このモデルの写真がまだ登録されていません。モデル詳細の素材タブからアップロードしてください。{" "}
+                <Link href={`/models/${modelId}`}>写真の追加はモデル詳細の素材タブから →</Link>
+              </p>
+            )}
+          </div>
+        )}
+
         {genId && (
           <div className="card">
             <h3>生成ジョブ</h3>
@@ -229,6 +291,86 @@ export default function GenerationStudio() {
         )}
       </aside>
     </div>
+  );
+}
+
+// One selectable reference-photo card. Eligibility here is a UI courtesy only —
+// the backend rejects assets without consent or with a non-reference usage_type.
+const SELECTABLE_USAGE_TYPES = ["reference", "training"];
+
+function AssetRefCard({
+  asset,
+  checked,
+  atLimit,
+  onToggle,
+}: {
+  asset: Asset;
+  checked: boolean;
+  atLimit: boolean;
+  onToggle: (assetId: string, checked: boolean) => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .getAssetPreview(asset.id)
+      .then((r) => setPreviewUrl(r.preview_url ? resolveFileUrl(r.preview_url) : null))
+      .catch(() => setPreviewUrl(null));
+  }, [asset.id]);
+
+  const eligible =
+    asset.consent_confirmed && SELECTABLE_USAGE_TYPES.includes(asset.usage_type);
+  const reason = !asset.consent_confirmed ? "同意未確認" : "利用目的対象外";
+  const disabled = !eligible || (!checked && atLimit);
+  const thumbStyle = { width: 96, height: 96 } as const;
+
+  return (
+    <label
+      style={{
+        width: 110,
+        textAlign: "center",
+        fontSize: 11,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: eligible ? 1 : 0.55,
+      }}
+    >
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={previewUrl}
+          alt={asset.original_filename ?? "参考写真"}
+          className="thumb"
+          style={thumbStyle}
+        />
+      ) : (
+        <div className="thumb" style={thumbStyle} />
+      )}
+      <div
+        className="muted"
+        style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        title={asset.original_filename ?? undefined}
+      >
+        {asset.original_filename ?? "(no name)"}
+      </div>
+      <div>
+        <span className="badge neutral" style={{ fontSize: 10 }}>{asset.asset_type}</span>
+      </div>
+      {eligible ? (
+        <div style={{ marginTop: 2 }}>
+          <input
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(e) => onToggle(asset.id, e.target.checked)}
+          />
+          {!checked && atLimit && (
+            <span className="muted" style={{ marginLeft: 4 }}>最大4枚</span>
+          )}
+        </div>
+      ) : (
+        <div className="muted" style={{ marginTop: 2 }}>{reason}</div>
+      )}
+    </label>
   );
 }
 

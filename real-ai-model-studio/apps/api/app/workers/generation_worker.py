@@ -54,12 +54,18 @@ def run_generation_job(generation_id: str) -> dict:
                 adapter_key = engine.adapter_key
         adapter = get_adapter(adapter_key)
 
+        # Load consented reference photos (img2img basis) as base64 for the
+        # adapter. Ownership/consent were validated at request time; re-checked
+        # here (defense in depth) since time passed and rows may have changed.
+        params = dict(generation.generation_params or {})
+        refs_b64 = _load_reference_images_b64(db, generation)
+        if refs_b64:
+            params["reference_images_b64"] = refs_b64
+
         # Adapter methods are async; bridge via asyncio.run. Safe because this runs
         # on a worker thread / process with no already-running event loop.
         images = asyncio.run(
-            adapter.generate_image(
-                generation.prompt_text, generation.generation_params or {}
-            )
+            adapter.generate_image(generation.prompt_text, params)
         )
 
         for i, img in enumerate(images):
@@ -99,6 +105,39 @@ def run_generation_job(generation_id: str) -> dict:
         return {"generation_id": generation_id, "status": "failed"}
     finally:
         db.close()
+
+
+def _load_reference_images_b64(db, generation) -> list[str]:
+    """Resolve generation_params.reference_asset_ids to base64 image payloads.
+
+    Execution-time consent gate (defense in depth alongside the request-time
+    checks): only the generation's OWN model's, consented, generation-eligible,
+    non-deleted assets are loaded. Anything that fails re-validation is skipped
+    fail-closed rather than sent to an engine.
+    """
+    import base64
+
+    from app.models.model import ModelAsset
+    from app.services.storage_service import read as storage_read
+
+    ids = (generation.generation_params or {}).get("reference_asset_ids") or []
+    out: list[str] = []
+    for aid in ids[:4]:
+        asset = db.get(ModelAsset, aid)
+        if (
+            asset is None
+            or asset.deleted_at is not None
+            or str(asset.model_id) != str(generation.model_id)
+            or not asset.consent_confirmed
+            or asset.usage_type not in ("reference", "training")
+            or asset.asset_type == "ng"
+        ):
+            continue
+        try:
+            out.append(base64.b64encode(storage_read(asset.file_path)).decode())
+        except Exception:  # unreadable file: skip, never crash the generation
+            continue
+    return out
 
 
 def _persist_image(img, generation_id: str, index: int) -> tuple[str, str]:
