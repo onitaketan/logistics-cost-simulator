@@ -17,6 +17,10 @@ COPY . .
 # the host at :8000. Override with --build-arg for other deployments.
 ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+# Pre-launch single-operator convenience (auto-login as seeded admin).
+# LAUNCH: build with NEXT_PUBLIC_AUTO_LOGIN=false.
+ARG NEXT_PUBLIC_AUTO_LOGIN=false
+ENV NEXT_PUBLIC_AUTO_LOGIN=$NEXT_PUBLIC_AUTO_LOGIN
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build --workspace @rams/web

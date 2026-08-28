@@ -7,9 +7,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # README runs uvicorn from apps/api while `.env` lives at the repo root; a bare
 # relative "env_file=.env" silently misses it and falls back to defaults. Check
 # repo-root, apps/api, and CWD (later entries take precedence for duplicates).
+#
+# Depth-defensive: in the dev monorepo this file sits at
+# <repo>/apps/api/app/core/config.py (parents[4] = repo root), but in the Docker
+# image it is /app/app/core/config.py — too shallow for those ancestors, and
+# indexing parents[4] there raised IndexError and crash-looped the container.
+# Containers receive real env vars (no .env file), so falling back to nearer
+# directories is harmless.
 _CORE = Path(__file__).resolve()
-_REPO_ROOT = _CORE.parents[4]   # …/real-ai-model-studio
-_API_DIR = _CORE.parents[2]     # …/real-ai-model-studio/apps/api
+_parents = _CORE.parents
+_API_DIR = _parents[2] if len(_parents) > 2 else _parents[len(_parents) - 1]
+_REPO_ROOT = _parents[4] if len(_parents) > 4 else _API_DIR
 
 
 class Settings(BaseSettings):

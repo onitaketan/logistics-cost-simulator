@@ -66,6 +66,12 @@ OFFLINE_MODE=false AI_ENGINE=openai OPENAI_API_KEY=sk-... docker compose up -d -
 生成は worker が Redis 経由で非同期実行し、生成画像は api/worker 共有ボリュームに保存される。
 初期パスワードは運用開始時に必ずローテーションすること（`docs/08_operations_manual.md`）。
 
+**フリーログイン（ローンチ前の既定）**: compose 起動では `NEXT_PUBLIC_AUTO_LOGIN=true` が既定で、
+画面を開くと初期 admin として自動サインインする（バックエンドの認証・監査はそのまま。
+ログインフォームを自動で代行しているだけ）。**ローンチ時のチェックリスト**:
+`NEXT_PUBLIC_AUTO_LOGIN=false` を付けて再ビルドし、初期パスワードを変更すること。
+なお admin パスワードを変更すると自動ログインは失敗し、通常のログイン画面に戻る（安全側）。
+
 ## 常駐運用（ローンチまで1台のPCで動かし続ける）
 
 ```bash
